@@ -20,12 +20,14 @@ export default function ChatHeader({ title, onOpenSidebar }) {
         <div className="min-w-0 flex-1">
 
           <h1 className="truncate text-base font-bold text-slate-900 sm:text-lg">
-            {title}
+            AssamWork AI
           </h1>
 
           <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500 sm:text-sm">
             <BookOpenCheck size={14} className="text-blue-600" />
-            Ebook-grounded AI tutor
+            <span className="truncate">
+              {title || "Ebook-grounded AI tutor"}
+            </span>
           </p>
 
         </div>

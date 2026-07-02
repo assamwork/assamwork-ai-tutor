@@ -9,6 +9,30 @@ import MessageBubble from "../components/MessageBubble";
 import TypingIndicator from "../components/TypingIndicator";
 import WelcomeScreen from "../components/WelcomeScreen";
 
+function StoreRecommendation() {
+  return (
+    <a
+      href="https://www.assamwork.com/"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 rounded-2xl border border-blue-100 bg-white/80 px-4 py-3 text-left shadow-sm transition hover:border-blue-200 hover:bg-blue-50/70 hover:shadow-md"
+      aria-label="Explore AssamWork study materials in a new tab"
+    >
+      <div className="min-w-0">
+        <p className="text-sm font-bold text-slate-900">
+          Need complete study materials?
+        </p>
+        <p className="mt-0.5 truncate text-xs text-slate-500">
+          Explore AssamWork exam bundles and high-yield PDFs.
+        </p>
+      </div>
+      <span className="shrink-0 rounded-full bg-blue-600 px-3 py-1.5 text-xs font-bold text-white">
+        Explore
+      </span>
+    </a>
+  );
+}
+
 export default function ChatPage() {
   const layoutContext = useOutletContext();
   const {
@@ -65,7 +89,7 @@ export default function ChatPage() {
     <div className="flex h-full h-dvh min-h-0 w-full min-w-0 flex-col overflow-hidden bg-slate-50">
 
       <ChatHeader
-        title={activeChat?.title ?? "AssamWork AI"}
+        title={activeChat?.title ?? "Ebook-grounded AI tutor"}
         onOpenSidebar={layoutContext?.openSidebar}
       />
 
@@ -99,11 +123,18 @@ export default function ChatPage() {
 
             <div className="flex min-w-0 flex-col gap-5 pb-2 sm:gap-9">
 
-              {activeChat.messages.map((message) => (
-                <MessageBubble
-                  key={message.id}
-                  message={message}
-                />
+              {activeChat.messages.map((message, index) => (
+                <div key={message.id} className="min-w-0">
+                  <MessageBubble message={message} />
+                  {message.role === "assistant" &&
+                    activeChat.messages.findIndex(
+                      (item) => item.role === "assistant"
+                    ) === index && (
+                      <div className="mt-4">
+                        <StoreRecommendation />
+                      </div>
+                    )}
+                </div>
               ))}
 
               {isLoading && loadingChatId === activeChatId && (

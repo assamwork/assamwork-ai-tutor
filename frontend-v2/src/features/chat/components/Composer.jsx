@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { BookOpenCheck, Paperclip, SendHorizontal } from "lucide-react";
+import { BookOpenCheck, Mic, Paperclip, SendHorizontal } from "lucide-react";
 
 import useChatStore from "../../../store/chatStore";
 
@@ -20,8 +20,8 @@ export default function Composer({
 }) {
   const textareaRef = useRef(null);
   const sendingRef = useRef(false);
-  const attachmentTimerRef = useRef(null);
-  const [attachmentMessage, setAttachmentMessage] = useState("");
+  const noticeTimerRef = useRef(null);
+  const [composerNotice, setComposerNotice] = useState("");
 
   const {
     addUserMessage,
@@ -43,21 +43,21 @@ export default function Composer({
 
   useEffect(() => {
     return () => {
-      if (attachmentTimerRef.current) {
-        window.clearTimeout(attachmentTimerRef.current);
+      if (noticeTimerRef.current) {
+        window.clearTimeout(noticeTimerRef.current);
       }
     };
   }, []);
 
-  function showAttachmentMessage() {
-    setAttachmentMessage("Image and file attachments are coming soon.");
+  function showComposerNotice(message) {
+    setComposerNotice(message);
 
-    if (attachmentTimerRef.current) {
-      window.clearTimeout(attachmentTimerRef.current);
+    if (noticeTimerRef.current) {
+      window.clearTimeout(noticeTimerRef.current);
     }
 
-    attachmentTimerRef.current = window.setTimeout(
-      () => setAttachmentMessage(""),
+    noticeTimerRef.current = window.setTimeout(
+      () => setComposerNotice(""),
       2600
     );
   }
@@ -143,9 +143,9 @@ export default function Composer({
 
           <button
             type="button"
-            onClick={showAttachmentMessage}
-            aria-label="Image and file attachments are coming soon"
-            aria-describedby="attachment-helper"
+            onClick={() => showComposerNotice("Image upload coming soon.")}
+            aria-label="Image upload coming soon"
+            aria-describedby="composer-notice"
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 sm:rounded-2xl"
           >
             <Paperclip size={19} />
@@ -166,6 +166,16 @@ export default function Composer({
 
           <button
             type="button"
+            onClick={() => showComposerNotice("Voice input coming soon.")}
+            aria-label="Voice input coming soon"
+            aria-describedby="composer-notice"
+            className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 min-[390px]:flex sm:rounded-2xl"
+          >
+            <Mic size={19} />
+          </button>
+
+          <button
+            type="button"
             onClick={sendMessage}
             disabled={isLoading || !prompt.trim()}
             aria-label={isLoading ? "Waiting for answer" : "Send message"}
@@ -176,13 +186,13 @@ export default function Composer({
 
         </div>
 
-        {attachmentMessage && (
+        {composerNotice && (
           <p
-            id="attachment-helper"
+            id="composer-notice"
             role="status"
             className="mt-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-center text-xs font-medium text-blue-700"
           >
-            {attachmentMessage}
+            {composerNotice}
           </p>
         )}
 
