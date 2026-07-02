@@ -1,100 +1,171 @@
-import os
 from pathlib import Path
 
 import chromadb
-from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
-
-from dotenv import load_dotenv
-from pypdf import PdfReader
+from chromadb.utils.embedding_functions import (
+    SentenceTransformerEmbeddingFunction,
+)
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-# -------------------------
-# Load Environment Variables
-# -------------------------
+from pypdf import PdfReader
 
-load_dotenv()
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+PROJECT_ROOT = Path(__file__).resolve().parent
+KNOWLEDGE_ROOT = PROJECT_ROOT / "knowledge"
+DATABASE_PATH = PROJECT_ROOT / "db"
+COLLECTION_NAME = "assamwork"
+EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+UPSERT_BATCH_SIZE = 100
 
-if not GEMINI_API_KEY:
-    raise Exception("GEMINI_API_KEY not found in .env")
 
-# -------------------------
-# ChromaDB
-# -------------------------
+def _pdf_files():
+    if not KNOWLEDGE_ROOT.exists():
+        return []
 
-embedding_function = SentenceTransformerEmbeddingFunction(
-    model_name="all-MiniLM-L6-v2"
-)
+    return sorted(
+        (
+            path
+            for path in KNOWLEDGE_ROOT.glob("*/*")
+            if path.is_file() and path.suffix.lower() == ".pdf"
+        ),
+        key=lambda path: (
+            path.parent.name.lower(),
+            path.name.lower(),
+        ),
+    )
 
-client = chromadb.PersistentClient(path="db")
 
-collection = client.get_or_create_collection(
-    name="assamwork",
-    embedding_function=embedding_function
-)
+def _extract_text(pdf: Path):
+    reader = PdfReader(pdf)
+    pages = []
 
-splitter = RecursiveCharacterTextSplitter(
-    chunk_size=1000,
-    chunk_overlap=200
-)
+    for page in reader.pages:
+        page_text = page.extract_text()
 
-knowledge_folder = Path("knowledge")
+        if page_text:
+            pages.append(page_text)
 
-total_chunks = 0
+    return "\n".join(pages)
 
-# -------------------------
-# Scan every folder
-# -------------------------
 
-for subject_folder in knowledge_folder.iterdir():
+def _chunk_id(subject: str, book: str, index: int):
+    return f"{subject}_{Path(book).stem}_{index}"
 
-    if not subject_folder.is_dir():
-        continue
 
-    subject = subject_folder.name
+def ingest_library():
+    embedding_function = SentenceTransformerEmbeddingFunction(
+        model_name=EMBEDDING_MODEL
+    )
+    client = chromadb.PersistentClient(path=str(DATABASE_PATH))
+    collection = client.get_or_create_collection(
+        name=COLLECTION_NAME,
+        embedding_function=embedding_function,
+    )
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=200,
+    )
 
-    print(f"\n📚 Subject : {subject}")
-
-    pdf_files = list(subject_folder.glob("*.pdf"))
-
-    print(f"Found {len(pdf_files)} PDF(s)")
+    pdf_files = _pdf_files()
+    books_processed = 0
+    chunks_added = 0
+    errors = []
 
     for pdf in pdf_files:
+        subject = pdf.parent.name
+        book = pdf.name
 
-        print(f"Reading : {pdf.name}")
+        try:
+            text = _extract_text(pdf)
+            chunks = splitter.split_text(text)
 
-        reader = PdfReader(pdf)
+            if not chunks:
+                raise ValueError("No extractable text was found.")
 
-        text = ""
-
-        for page_no, page in enumerate(reader.pages):
-
-            page_text = page.extract_text()
-
-            if page_text:
-                text += page_text + "\n"
-
-        chunks = splitter.split_text(text)
-
-        for i, chunk in enumerate(chunks):
-
-            collection.add(
-
-                ids=[f"{subject}_{pdf.stem}_{i}"],
-
-                documents=[chunk],
-
-                metadatas=[{
+            ids = [
+                _chunk_id(subject, book, index)
+                for index in range(len(chunks))
+            ]
+            metadatas = [
+                {
                     "subject": subject,
-                    "book": pdf.name
-                }]
+                    "book": book,
+                }
+                for _ in chunks
+            ]
+
+            for start in range(0, len(chunks), UPSERT_BATCH_SIZE):
+                end = start + UPSERT_BATCH_SIZE
+                collection.upsert(
+                    ids=ids[start:end],
+                    documents=chunks[start:end],
+                    metadatas=metadatas[start:end],
+                )
+
+            existing = collection.get(
+                where={
+                    "$and": [
+                        {"subject": subject},
+                        {"book": book},
+                    ]
+                },
+                include=[],
+            )
+            stale_ids = list(set(existing.get("ids") or []) - set(ids))
+
+            if stale_ids:
+                collection.delete(ids=stale_ids)
+
+            books_processed += 1
+            chunks_added += len(chunks)
+        except Exception as error:
+            errors.append(
+                {
+                    "subject": subject,
+                    "book": book,
+                    "error": str(error),
+                }
             )
 
-        total_chunks += len(chunks)
+    if not pdf_files:
+        message = "No PDF ebooks were found in the knowledge library."
+    elif errors:
+        message = (
+            f"Indexed {books_processed} of {len(pdf_files)} ebook(s). "
+            f"{len(errors)} ebook(s) failed."
+        )
+    else:
+        message = (
+            f"Library indexed successfully. "
+            f"{books_processed} ebook(s) processed."
+        )
 
-        print(f"✅ {len(chunks)} chunks added.")
+    return {
+        "success": len(errors) == 0,
+        "message": message,
+        "booksProcessed": books_processed,
+        "chunksAdded": chunks_added,
+        "errors": errors,
+    }
 
-print("\n===============================")
-print(f"Finished.")
-print(f"Total chunks : {total_chunks}")
-print("===============================")
+
+def main():
+    result = ingest_library()
+
+    print("\n===============================")
+    print(result["message"])
+    print(f"Books processed : {result['booksProcessed']}")
+    print(f"Chunks indexed  : {result['chunksAdded']}")
+
+    if result["errors"]:
+        print("Errors:")
+
+        for error in result["errors"]:
+            print(
+                f"- {error['subject']} / {error['book']}: "
+                f"{error['error']}"
+            )
+
+    print("===============================")
+
+
+if __name__ == "__main__":
+    main()
