@@ -1,0 +1,172 @@
+.sidebar{
+
+    width:280px;
+    background:#ffffff;
+    border-right:1px solid #e5e7eb;
+
+    display:flex;
+    flex-direction:column;
+
+}
+
+.sidebar-header{
+
+    padding:24px;
+
+}
+
+.logo{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:14px;
+
+}
+
+.logo-icon{
+
+    width:48px;
+
+    height:48px;
+
+    border-radius:14px;
+
+    background:#2563EB;
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    color:white;
+
+    font-size:22px;
+
+}
+
+.logo-text h2{
+
+    font-size:18px;
+
+    color:#0f172a;
+
+}
+
+.logo-text p{
+
+    font-size:13px;
+
+    color:#64748b;
+
+}
+
+.new-chat{
+
+    margin:20px;
+
+    border:none;
+
+    background:#2563EB;
+
+    color:white;
+
+    padding:14px;
+
+    border-radius:14px;
+
+    font-size:15px;
+
+    font-weight:600;
+
+    transition:.2s;
+
+}
+
+.new-chat:hover{
+
+    background:#1d4ed8;
+
+}
+
+.history{
+
+    flex:1;
+
+    overflow:auto;
+
+    padding:20px;
+
+}
+
+.history-title{
+
+    color:#64748b;
+
+    font-size:13px;
+
+    margin-bottom:12px;
+
+}
+
+.chat-item{
+
+    padding:12px;
+
+    border-radius:12px;
+
+    cursor:pointer;
+
+    transition:.2s;
+
+    margin-bottom:6px;
+
+}
+
+.chat-item:hover{
+
+    background:#f1f5f9;
+
+}
+
+.sidebar-footer{
+
+    border-top:1px solid #e5e7eb;
+
+    padding:18px;
+
+}
+
+.profile{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:12px;
+
+}
+
+.avatar{
+
+    width:42px;
+
+    height:42px;
+
+    border-radius:50%;
+
+    background:#2563EB;
+
+    color:white;
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    font-weight:700;
+
+}
