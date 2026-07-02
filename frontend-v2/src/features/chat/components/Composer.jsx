@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
-import { BookOpenCheck, SendHorizontal } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { BookOpenCheck, Paperclip, SendHorizontal } from "lucide-react";
 
 import useChatStore from "../../../store/chatStore";
 
@@ -20,6 +20,8 @@ export default function Composer({
 }) {
   const textareaRef = useRef(null);
   const sendingRef = useRef(false);
+  const attachmentTimerRef = useRef(null);
+  const [attachmentMessage, setAttachmentMessage] = useState("");
 
   const {
     addUserMessage,
@@ -38,6 +40,27 @@ export default function Composer({
     textarea.style.height = "auto";
     textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
   }, [prompt]);
+
+  useEffect(() => {
+    return () => {
+      if (attachmentTimerRef.current) {
+        window.clearTimeout(attachmentTimerRef.current);
+      }
+    };
+  }, []);
+
+  function showAttachmentMessage() {
+    setAttachmentMessage("Image and file attachments are coming soon.");
+
+    if (attachmentTimerRef.current) {
+      window.clearTimeout(attachmentTimerRef.current);
+    }
+
+    attachmentTimerRef.current = window.setTimeout(
+      () => setAttachmentMessage(""),
+      2600
+    );
+  }
 
   async function sendMessage() {
     if (!prompt.trim() || isLoading || sendingRef.current) return;
@@ -118,6 +141,16 @@ export default function Composer({
       <div className="mx-auto max-w-5xl">
         <div className="flex items-end gap-2 rounded-2xl border border-slate-300 bg-white p-2 shadow-lg shadow-slate-200/70 transition focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100 sm:gap-3 sm:rounded-3xl sm:p-3">
 
+          <button
+            type="button"
+            onClick={showAttachmentMessage}
+            aria-label="Image and file attachments are coming soon"
+            aria-describedby="attachment-helper"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 sm:rounded-2xl"
+          >
+            <Paperclip size={19} />
+          </button>
+
           <textarea
             ref={textareaRef}
             rows={1}
@@ -142,6 +175,16 @@ export default function Composer({
           </button>
 
         </div>
+
+        {attachmentMessage && (
+          <p
+            id="attachment-helper"
+            role="status"
+            className="mt-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-center text-xs font-medium text-blue-700"
+          >
+            {attachmentMessage}
+          </p>
+        )}
 
         <p
           id="chat-input-helper"

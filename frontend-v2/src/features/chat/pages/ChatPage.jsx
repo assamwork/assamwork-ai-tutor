@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useOutletContext } from "react-router-dom";
 
 import useChatStore from "../../../store/chatStore";
 
@@ -9,6 +10,7 @@ import TypingIndicator from "../components/TypingIndicator";
 import WelcomeScreen from "../components/WelcomeScreen";
 
 export default function ChatPage() {
+  const layoutContext = useOutletContext();
   const {
     chats,
     activeChatId,
@@ -35,15 +37,16 @@ export default function ChatPage() {
   }, [activeChat?.messages, isLoading]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-slate-50">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
 
       <ChatHeader
-        title={activeChat?.title ?? "New Chat"}
+        title={activeChat?.title ?? "AssamWork AI"}
+        onOpenSidebar={layoutContext?.openSidebar}
       />
 
-      <main className="min-h-0 flex-1 overflow-y-auto">
+      <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-smooth">
 
-        <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+        <div className="mx-auto w-full max-w-5xl px-3 py-5 sm:px-6 sm:py-8 lg:px-8">
 
           {chatsLoading || messagesLoading ? (
             <div className="mx-auto max-w-3xl py-8" aria-live="polite">
