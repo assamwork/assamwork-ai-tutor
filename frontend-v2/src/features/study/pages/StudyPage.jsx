@@ -111,7 +111,7 @@ export default function StudyPage() {
   }
 
   return (
-    <div className="flex h-full max-w-full flex-col overflow-hidden bg-[radial-gradient(circle_at_top,#eef5ff_0%,#f8fafc_44%,#ffffff_100%)]">
+    <div className="home-shell flex h-full max-w-full flex-col overflow-hidden bg-[radial-gradient(circle_at_top,#eef5ff_0%,#f8fafc_44%,#ffffff_100%)]">
       <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-32 pt-20 sm:px-6 sm:pb-36 sm:pt-20 lg:px-8 lg:pt-10">
         <div className="mx-auto flex min-h-full max-w-4xl flex-col items-center justify-center text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-3xl bg-blue-600 text-white shadow-xl shadow-blue-200/70 sm:h-14 sm:w-14">
@@ -122,9 +122,9 @@ export default function StudyPage() {
             AssamWork AI
           </p>
 
-          <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-950 sm:text-5xl">
+          <h1 className="home-heading mt-3 text-3xl font-bold tracking-tight text-slate-950 sm:text-5xl">
             <span className="block text-slate-700">{greeting}</span>
-            <span className="block">{learnerName}</span>
+            <span className="block break-words">{learnerName}</span>
           </h1>
 
           <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600 sm:text-base">
@@ -142,7 +142,7 @@ export default function StudyPage() {
                 key={item}
                 type="button"
                 onClick={() => setPrompt(item)}
-                className="min-h-12 rounded-2xl border border-slate-200 bg-white/80 px-3 py-3 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 sm:text-sm"
+                className="home-chip min-h-12 rounded-2xl border border-slate-200 bg-white/80 px-3 py-3 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 sm:text-sm"
               >
                 {item}
               </button>
@@ -153,27 +153,27 @@ export default function StudyPage() {
             href="https://www.assamwork.com/"
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-5 flex w-full max-w-2xl items-center gap-3 rounded-2xl border border-blue-100 bg-white/80 px-4 py-3 text-left shadow-sm transition hover:border-blue-200 hover:bg-blue-50/70"
+            className="home-material-card mt-5 grid w-full max-w-2xl grid-cols-[2.5rem_minmax(0,1fr)] gap-3 rounded-2xl border border-blue-100 bg-white/80 px-4 py-3 text-left shadow-sm transition hover:border-blue-200 hover:bg-blue-50/70 sm:flex sm:items-center"
           >
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white">
               <ShoppingBag size={19} />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-bold text-slate-900">
+              <p className="text-sm font-bold leading-5 text-slate-900">
                 AssamWork Study Materials
               </p>
-              <p className="truncate text-xs text-slate-500">
+              <p className="text-xs leading-4 text-slate-500">
                 Exam-ready PDFs, PYQs, mock tests and revision notes.
               </p>
             </div>
-            <span className="shrink-0 rounded-full bg-blue-600 px-3 py-1.5 text-xs font-bold text-white">
+            <span className="col-span-2 inline-flex min-h-9 w-full shrink-0 items-center justify-center rounded-full bg-blue-600 px-3 py-1.5 text-xs font-bold text-white sm:w-auto">
               Explore materials →
             </span>
           </a>
         </div>
       </main>
 
-      <section className="shrink-0 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6 sm:pb-6">
+      <section className="home-composer shrink-0 px-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:pb-6">
         <div className="mx-auto max-w-3xl">
           <ChatInputBar
             value={prompt}

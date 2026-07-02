@@ -75,7 +75,7 @@ export default function ChatInputBar({
         </p>
       )}
 
-      <div className="flex min-w-0 items-end gap-1.5 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-lg shadow-slate-200/70 transition focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100 sm:gap-3 sm:rounded-3xl sm:p-3">
+      <div className="chat-input-bar flex min-w-0 items-end gap-1.5 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-lg shadow-slate-200/70 transition focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100 sm:gap-3 sm:rounded-3xl sm:p-3">
         <button
           type="button"
           onClick={() =>
@@ -98,7 +98,7 @@ export default function ChatInputBar({
           aria-label={ariaLabel}
           aria-describedby={helperText ? "chat-input-helper" : undefined}
           placeholder={placeholder}
-          className="max-h-[7.5rem] min-h-10 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1.5 py-2 text-[15px] leading-6 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed sm:min-h-11 sm:max-h-40 sm:px-3 sm:py-2.5 sm:text-base"
+          className="max-h-[5.75rem] min-h-10 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1.5 py-2 text-[15px] leading-6 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed sm:min-h-11 sm:max-h-40 sm:px-3 sm:py-2.5 sm:text-base"
         />
 
         <button

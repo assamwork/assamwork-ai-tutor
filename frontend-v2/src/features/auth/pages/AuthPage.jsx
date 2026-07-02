@@ -49,19 +49,20 @@ export default function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const [loading, setLoading] = useState(false);
+  const [loadingAction, setLoadingAction] = useState(null);
   const [error, setError] = useState("");
+  const loading = Boolean(loadingAction);
 
   async function handleGoogle() {
     try {
-      setLoading(true);
+      setLoadingAction("google");
       setError("");
 
       await loginWithGoogle();
     } catch (e) {
       setError(getAuthErrorMessage(e));
     } finally {
-      setLoading(false);
+      setLoadingAction(null);
     }
   }
 
@@ -69,7 +70,7 @@ export default function AuthPage() {
     e.preventDefault();
 
     try {
-      setLoading(true);
+      setLoadingAction("email");
       setError("");
 
       if (isLogin) {
@@ -80,7 +81,7 @@ export default function AuthPage() {
     } catch (e) {
       setError(getAuthErrorMessage(e));
     } finally {
-      setLoading(false);
+      setLoadingAction(null);
     }
   }
 
@@ -135,7 +136,9 @@ export default function AuthPage() {
               className="h-5 w-5"
             />
 
-            {loading ? "Please wait…" : "Continue with Google"}
+            {loadingAction === "google"
+              ? "Opening Google…"
+              : "Continue with Google"}
 
           </button>
 
@@ -199,7 +202,11 @@ export default function AuthPage() {
               className="w-full rounded-xl bg-blue-600 py-4 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading
-                ? "Please wait..."
+                ? loadingAction === "email"
+                  ? "Please wait..."
+                  : isLogin
+                  ? "Login"
+                  : "Create Account"
                 : isLogin
                 ? "Login"
                 : "Create Account"}

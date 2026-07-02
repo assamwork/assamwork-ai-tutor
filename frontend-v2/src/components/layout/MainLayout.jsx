@@ -13,7 +13,7 @@ export default function MainLayout() {
   }
 
   return (
-    <div className="flex h-screen h-dvh overflow-hidden bg-slate-50">
+    <div className="app-shell flex h-screen h-dvh overflow-hidden bg-slate-50">
 
       <Sidebar
         isOpen={sidebarOpen}
@@ -26,7 +26,7 @@ export default function MainLayout() {
             type="button"
             onClick={openSidebar}
             aria-label="Open navigation menu"
-            className="absolute left-4 top-3 z-30 flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-100 lg:hidden"
+            className="main-menu-button absolute left-4 top-[max(0.75rem,env(safe-area-inset-top))] z-30 flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-100 lg:hidden"
           >
             <Menu size={22} />
           </button>

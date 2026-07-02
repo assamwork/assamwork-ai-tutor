@@ -214,7 +214,7 @@ export default function Sidebar({ isOpen, onClose }) {
       />
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[min(18rem,86vw)] max-w-[86vw] flex-col overflow-hidden border-r border-slate-200 bg-white shadow-2xl shadow-slate-950/10 transition-transform duration-200 lg:static lg:z-auto lg:w-72 lg:max-w-none lg:translate-x-0 lg:shadow-none ${
+        className={`sidebar-panel fixed inset-y-0 left-0 z-50 flex w-[min(18rem,86vw)] max-w-[86vw] flex-col overflow-hidden border-r border-slate-200 bg-white shadow-2xl shadow-slate-950/10 transition-transform duration-200 lg:static lg:z-auto lg:w-72 lg:max-w-none lg:translate-x-0 lg:shadow-none ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -262,7 +262,7 @@ export default function Sidebar({ isOpen, onClose }) {
 
       {/* Chats */}
 
-      <div className="min-w-0 flex-1 overflow-y-auto p-4">
+      <div className="sidebar-scroll min-w-0 flex-1 overflow-y-auto p-4">
 
         <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
           Navigation
@@ -436,7 +436,7 @@ export default function Sidebar({ isOpen, onClose }) {
               key={label}
               type="button"
               disabled
-              className="flex w-full min-w-0 items-center gap-3 rounded-xl px-4 py-3 text-slate-400"
+              className="flex w-full min-w-0 cursor-not-allowed items-center gap-3 rounded-xl px-4 py-3 text-slate-400 opacity-90"
             >
               <Icon size={20} className="shrink-0" />
               <span className="truncate">{label}</span>
