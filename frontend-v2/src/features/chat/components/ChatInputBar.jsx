@@ -76,8 +76,8 @@ export default function ChatInputBar({
   const textareaClassName = isCompact
     ? "max-h-[4.5rem] min-h-9 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1.5 py-1.5 text-[15px] leading-6 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed sm:min-h-10 sm:px-2 sm:py-2"
     : "max-h-[5.75rem] min-h-10 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1.5 py-2 text-[15px] leading-6 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed sm:min-h-11 sm:max-h-40 sm:px-3 sm:py-2.5 sm:text-base";
-  const iconSize = isCompact ? 16 : 18;
-  const sendIconSize = isCompact ? 17 : 19;
+  const iconSize = isCompact ? 14 : 16;
+  const sendIconSize = isCompact ? 15 : 17;
 
   return (
     <div className="relative">
