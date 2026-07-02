@@ -1,6 +1,6 @@
 import {
   MessageSquare,
-  BookOpen,
+  Home,
   User,
   Settings,
   Plus,
@@ -10,6 +10,18 @@ import {
   Trash2,
   X,
   LibraryBig,
+  ChevronDown,
+  ChevronRight,
+  Moon,
+  Monitor,
+  Sun,
+  Type,
+  Check,
+  Bookmark,
+  Layers3,
+  CalendarDays,
+  FileQuestion,
+  ShoppingBag,
 } from "lucide-react";
 
 import { useEffect, useState } from "react";
@@ -26,6 +38,14 @@ export default function Sidebar({ isOpen, onClose }) {
   const [editingChatId, setEditingChatId] = useState(null);
   const [editingTitle, setEditingTitle] = useState("");
   const [logoutError, setLogoutError] = useState("");
+  const [recentOpen, setRecentOpen] = useState(true);
+  const [activePanel, setActivePanel] = useState(null);
+  const [colorMode, setColorMode] = useState(
+    () => localStorage.getItem("assamwork-color-mode") || "system"
+  );
+  const [fontStyle, setFontStyle] = useState(
+    () => localStorage.getItem("assamwork-font-style") || "default"
+  );
 
   const {
     chats,
@@ -59,11 +79,46 @@ export default function Sidebar({ isOpen, onClose }) {
     };
   }, [isOpen, onClose]);
 
-  const menu = [
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+
+    function applyTheme() {
+      const resolvedTheme =
+        colorMode === "system"
+          ? media.matches
+            ? "dark"
+            : "light"
+          : colorMode;
+
+      document.documentElement.dataset.theme = resolvedTheme;
+      document.documentElement.dataset.colorMode = colorMode;
+      document.documentElement.style.colorScheme = resolvedTheme;
+      localStorage.setItem("assamwork-color-mode", colorMode);
+    }
+
+    applyTheme();
+    media.addEventListener("change", applyTheme);
+
+    return () => {
+      media.removeEventListener("change", applyTheme);
+    };
+  }, [colorMode]);
+
+  useEffect(() => {
+    document.documentElement.dataset.fontStyle = fontStyle;
+    localStorage.setItem("assamwork-font-style", fontStyle);
+  }, [fontStyle]);
+
+  const navigationItems = [
+    { icon: Home, label: "Home", path: "/study" },
     { icon: MessageSquare, label: "Chat", path: "/chat" },
-    { icon: BookOpen, label: "Study", path: "/study" },
-    { icon: User, label: "Profile", path: "/profile" },
-    { icon: Settings, label: "Settings", path: "/settings" },
+  ];
+
+  const futureItems = [
+    { icon: Bookmark, label: "Bookmarks" },
+    { icon: Layers3, label: "Flashcards" },
+    { icon: CalendarDays, label: "Planner" },
+    { icon: FileQuestion, label: "Mock Tests" },
   ];
 
   const filteredChats = chats.filter((chat) =>
@@ -72,6 +127,11 @@ export default function Sidebar({ isOpen, onClose }) {
 
   function goTo(path) {
     navigate(path);
+    onClose();
+  }
+
+  function openStudyMaterials() {
+    window.open("https://www.assamwork.com/", "_blank", "noopener,noreferrer");
     onClose();
   }
 
@@ -205,8 +265,48 @@ export default function Sidebar({ isOpen, onClose }) {
       <div className="min-w-0 flex-1 overflow-y-auto p-4">
 
         <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Chats
+          Navigation
         </h3>
+
+        <div className="space-y-2">
+          {navigationItems.map(({ icon: Icon, label, path }) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => goTo(path)}
+              className={`flex w-full min-w-0 items-center gap-3 rounded-xl px-4 py-3 transition ${
+                location.pathname === path
+                  ? "bg-blue-50 text-blue-700"
+                  : "text-slate-700 hover:bg-slate-100"
+              }`}
+            >
+              <Icon size={20} className="shrink-0" />
+              <span className="truncate">{label}</span>
+            </button>
+          ))}
+
+          <button
+            type="button"
+            onClick={openStudyMaterials}
+            className="flex w-full min-w-0 items-center gap-3 rounded-xl px-4 py-3 text-slate-700 transition hover:bg-slate-100"
+          >
+            <ShoppingBag size={20} className="shrink-0" />
+            <span className="truncate">Study Materials</span>
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setRecentOpen((open) => !open)}
+          className="mb-2 mt-6 flex min-h-11 w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+          aria-expanded={recentOpen}
+        >
+          <span>Recent Chats</span>
+          {recentOpen ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
+        </button>
+
+        {recentOpen && (
+        <div className="space-y-2">
 
         <label className="mb-3 flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 transition focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-50">
           <Search size={17} className="shrink-0 text-slate-400" />
@@ -229,8 +329,6 @@ export default function Sidebar({ isOpen, onClose }) {
             </button>
           )}
         </label>
-
-        <div className="space-y-2">
 
           {chatsLoading && (
             <div className="space-y-2 py-1" aria-label="Loading chats">
@@ -301,11 +399,12 @@ export default function Sidebar({ isOpen, onClose }) {
             <p className="px-2 py-3 text-sm text-slate-500">
               {searchQuery.trim()
                 ? "No chats found."
-                : "No cloud chats yet."}
+                : "No recent chats yet."}
             </p>
           )}
 
         </div>
+        )}
 
         {error && (
           <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
@@ -327,28 +426,25 @@ export default function Sidebar({ isOpen, onClose }) {
           </div>
         )}
 
-        <h3 className="mt-8 mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Navigation
+        <h3 className="mb-3 mt-8 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Future features
         </h3>
 
         <div className="space-y-2">
-
-          {menu.map(({ icon: Icon, label, path }) => (
+          {futureItems.map(({ icon: Icon, label }) => (
             <button
               key={label}
               type="button"
-              onClick={() => goTo(path)}
-              className={`flex w-full min-w-0 items-center gap-3 rounded-xl px-4 py-3 transition ${
-                location.pathname === path
-                  ? "bg-blue-50 text-blue-700"
-                  : "text-slate-700 hover:bg-slate-100"
-              }`}
+              disabled
+              className="flex w-full min-w-0 items-center gap-3 rounded-xl px-4 py-3 text-slate-400"
             >
               <Icon size={20} className="shrink-0" />
               <span className="truncate">{label}</span>
+              <span className="ml-auto shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                Soon
+              </span>
             </button>
           ))}
-
         </div>
 
         {hasAdminAccess && (
@@ -376,44 +472,148 @@ export default function Sidebar({ isOpen, onClose }) {
 
       {/* Footer */}
 
-      <div className="border-t border-slate-200 p-5">
+      <div className="border-t border-slate-200 p-4">
 
-        <div className="flex items-center gap-3">
+        {activePanel === "account" && (
+          <div className="mb-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white font-bold">
+                {user?.displayName?.charAt(0) ||
+                  user?.email?.charAt(0)?.toUpperCase() ||
+                  "U"}
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-bold text-slate-900">
+                  {user?.displayName || "User"}
+                </p>
+                <p className="truncate text-xs text-slate-500">
+                  {user?.email}
+                </p>
+              </div>
+            </div>
 
-          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-600 text-white font-bold">
-            {user?.displayName?.charAt(0) ||
-              user?.email?.charAt(0)?.toUpperCase() ||
-              "U"}
+            <button
+              type="button"
+              onClick={() => goTo("/profile")}
+              className="mt-3 flex min-h-10 w-full items-center justify-center rounded-xl bg-slate-100 px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-200"
+            >
+              View profile
+            </button>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="mt-2 flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-red-200 px-3 text-sm font-bold text-red-600 transition hover:bg-red-50"
+            >
+              <LogOut size={16} />
+              Logout
+            </button>
+
+            {logoutError && (
+              <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                {logoutError}
+              </p>
+            )}
           </div>
-
-          <div className="min-w-0 flex-1">
-
-            <h3 className="truncate font-semibold">
-              {user?.displayName || "User"}
-            </h3>
-
-            <p className="text-sm text-slate-500 truncate">
-              {user?.email}
-            </p>
-
-          </div>
-
-        </div>
-
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-200 py-3 font-semibold text-red-600 transition hover:bg-red-50"
-        >
-          <LogOut size={18} />
-          Logout
-        </button>
-
-        {logoutError && (
-          <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-            {logoutError}
-          </p>
         )}
+
+        {activePanel === "settings" && (
+          <div className="mb-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+              Color mode
+            </p>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              {[
+                { value: "system", label: "System", icon: Monitor },
+                { value: "light", label: "Light", icon: Sun },
+                { value: "dark", label: "Dark", icon: Moon },
+              ].map(({ value, label, icon: Icon }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setColorMode(value)}
+                  aria-pressed={colorMode === value}
+                  className={`relative flex min-h-10 flex-col items-center justify-center gap-1 rounded-xl border px-2 text-[11px] font-bold transition ${
+                    colorMode === value
+                      ? "border-blue-200 bg-blue-50 text-blue-700"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {colorMode === value && (
+                    <Check size={12} className="absolute right-1.5 top-1.5" />
+                  )}
+                  <Icon size={15} />
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <p className="mt-4 text-xs font-bold uppercase tracking-wide text-slate-400">
+              Font style
+            </p>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              {[
+                { value: "default", label: "Default" },
+                { value: "modern", label: "Modern" },
+                { value: "system", label: "System" },
+              ].map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setFontStyle(value)}
+                  aria-pressed={fontStyle === value}
+                  className={`relative flex min-h-10 items-center justify-center gap-1 rounded-xl border px-2 text-[11px] font-bold transition ${
+                    fontStyle === value
+                      ? "border-blue-200 bg-blue-50 text-blue-700"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {fontStyle === value && (
+                    <Check size={12} className="absolute right-1.5 top-1.5" />
+                  )}
+                  <Type size={14} />
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() =>
+              setActivePanel((panel) =>
+                panel === "account" ? null : "account"
+              )
+            }
+            className={`flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-bold transition ${
+              activePanel === "account"
+                ? "border-blue-200 bg-blue-50 text-blue-700"
+                : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+            }`}
+          >
+            <User size={17} />
+            Account
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              setActivePanel((panel) =>
+                panel === "settings" ? null : "settings"
+              )
+            }
+            className={`flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-bold transition ${
+              activePanel === "settings"
+                ? "border-blue-200 bg-blue-50 text-blue-700"
+                : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+            }`}
+          >
+            <Settings size={17} />
+            Settings
+          </button>
+        </div>
 
       </div>
 

@@ -1,259 +1,192 @@
-import {
-  ArrowRight,
-  BookOpenCheck,
-  CalendarDays,
-  Clock3,
-  Download,
-  ExternalLink,
-  FileQuestion,
-  Flame,
-  Layers3,
-  MessageSquareText,
-  Newspaper,
-  ShieldCheck,
-  ShoppingBag,
-} from "lucide-react";
+import { useRef, useState } from "react";
+import { ShoppingBag, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import useAuthStore from "../../../store/authStore";
 import useChatStore from "../../../store/chatStore";
+import ChatInputBar from "../../chat/components/ChatInputBar";
+
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+
+function getFriendlyChatError(error) {
+  if (error?.message === "Unable to get an answer right now.") {
+    return error.message;
+  }
+
+  return "Unable to reach AssamWork AI. Please check your connection and try again.";
+}
+
+function getTimeAwareGreeting() {
+  const hour = new Date().getHours();
+
+  if (hour < 12) return "Good Morning,";
+  if (hour < 17) return "Good Afternoon,";
+  return "Good Evening,";
+}
 
 export default function StudyPage() {
   const navigate = useNavigate();
+  const sendingRef = useRef(false);
   const user = useAuthStore((state) => state.user);
   const profile = useAuthStore((state) => state.profile);
-  const chats = useChatStore((state) => state.chats);
-  const setActiveChat = useChatStore((state) => state.setActiveChat);
+  const {
+    addUserMessage,
+    addAssistantMessage,
+    createChat,
+    isLoading,
+    setLoading,
+  } = useChatStore();
+  const [prompt, setPrompt] = useState("");
 
-  const completedChats = chats.filter(
-    (chat) => chat.messages.length > 0
-  );
-  const totalChats =
-    typeof profile?.totalChats === "number"
-      ? Math.max(profile.totalChats, completedChats.length)
-      : completedChats.length;
-  const recentChats = completedChats.slice(0, 4);
-  const firstName =
+  const learnerName =
     profile?.name?.trim().split(/\s+/)[0] ||
     user?.displayName?.trim().split(/\s+/)[0] ||
-    "Student";
+    user?.email?.split("@")[0] ||
+    "AssamWork learner";
 
-  function openChat(chatId) {
-    setActiveChat(chatId);
-    navigate("/chat");
+  const greeting = getTimeAwareGreeting();
+
+  async function sendFromHome() {
+    if (!prompt.trim() || isLoading || sendingRef.current) return;
+
+    const question = prompt.trim();
+    sendingRef.current = true;
+    let targetChatId = null;
+
+    try {
+      targetChatId = await createChat();
+
+      if (!targetChatId) return;
+
+      setLoading(true, targetChatId);
+
+      const savedUserMessageId = await addUserMessage(
+        question,
+        targetChatId
+      );
+
+      if (!savedUserMessageId) return;
+
+      setPrompt("");
+      navigate("/chat");
+
+      const response = await fetch(`${API_URL}/ask`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          question,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Unable to get an answer right now.");
+      }
+
+      const data = await response.json();
+
+      await addAssistantMessage(
+        {
+          content: data.answer ?? "No answer returned.",
+          sources: data.sources ?? [],
+        },
+        targetChatId
+      );
+    } catch (error) {
+      if (targetChatId) {
+        await addAssistantMessage(
+          {
+            content: getFriendlyChatError(error),
+            sources: [],
+          },
+          targetChatId
+        );
+      }
+    } finally {
+      sendingRef.current = false;
+      setLoading(false);
+    }
   }
 
-  const comingSoon = [
-    {
-      title: "AI Mock Tests",
-      description: "Practice exam-style tests generated from study material.",
-      icon: FileQuestion,
-      color: "bg-violet-100 text-violet-700",
-    },
-    {
-      title: "Flashcards",
-      description: "Review key facts with quick, focused recall sessions.",
-      icon: Layers3,
-      color: "bg-amber-100 text-amber-700",
-    },
-    {
-      title: "Current Affairs",
-      description: "A focused feed for Assam and national exam preparation.",
-      icon: Newspaper,
-      color: "bg-rose-100 text-rose-700",
-    },
-    {
-      title: "Study Planner",
-      description: "Organize goals, revision cycles, and upcoming topics.",
-      icon: CalendarDays,
-      color: "bg-cyan-100 text-cyan-700",
-    },
-  ];
-
   return (
-    <div className="h-full max-w-full overflow-y-auto overflow-x-hidden bg-slate-50">
-      <div className="mx-auto max-w-7xl overflow-x-hidden px-4 pb-10 pt-20 sm:px-6 sm:pt-20 lg:px-8 lg:pt-8">
-        <section className="max-w-full overflow-hidden rounded-3xl bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-700 p-6 text-white shadow-xl shadow-blue-200/60 sm:p-8 lg:p-10">
-          <div className="flex min-w-0 flex-col justify-between gap-8 lg:flex-row lg:items-center">
-            <div className="min-w-0 max-w-2xl">
-              <p className="text-sm font-semibold text-blue-100">
-                Study dashboard
-              </p>
-              <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
-                Welcome back, {firstName}
-              </h1>
-              <p className="mt-3 max-w-xl text-sm leading-6 text-blue-100 sm:text-base">
-                Continue learning with answers grounded in AssamWork study
-                materials and built for competitive exam preparation.
-              </p>
+    <div className="flex h-full max-w-full flex-col overflow-hidden bg-[radial-gradient(circle_at_top,#eef5ff_0%,#f8fafc_44%,#ffffff_100%)]">
+      <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-32 pt-20 sm:px-6 sm:pb-36 sm:pt-20 lg:px-8 lg:pt-10">
+        <div className="mx-auto flex min-h-full max-w-4xl flex-col items-center justify-center text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-3xl bg-blue-600 text-white shadow-xl shadow-blue-200/70 sm:h-14 sm:w-14">
+            <Sparkles size={24} />
+          </div>
+
+          <p className="mt-4 text-xs font-bold uppercase tracking-[0.24em] text-blue-600">
+            AssamWork AI
+          </p>
+
+          <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-950 sm:text-5xl">
+            <span className="block text-slate-700">{greeting}</span>
+            <span className="block">{learnerName}</span>
+          </h1>
+
+          <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600 sm:text-base">
+            Ready to study today?
+          </p>
+
+          <div className="mt-8 grid w-full max-w-2xl grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
+            {[
+              "📘 Explain a topic",
+              "📝 Generate MCQs",
+              "📄 Summarize chapter",
+              "🎯 Practice PYQs",
+            ].map((item) => (
               <button
+                key={item}
                 type="button"
-                onClick={() => navigate("/chat")}
-                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-bold text-blue-700 shadow-sm transition hover:bg-blue-50"
+                onClick={() => setPrompt(item)}
+                className="min-h-12 rounded-2xl border border-slate-200 bg-white/80 px-3 py-3 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 sm:text-sm"
               >
-                Ask AssamWork AI
-                <ArrowRight size={17} />
+                {item}
               </button>
-            </div>
-
-            <div className="grid min-w-0 grid-cols-2 gap-3 sm:min-w-80">
-              <div className="rounded-2xl border border-white/20 bg-white/10 p-4 backdrop-blur">
-                <MessageSquareText size={21} className="text-blue-100" />
-                <p className="mt-4 text-3xl font-bold">{totalChats}</p>
-                <p className="mt-1 text-xs text-blue-100">Total chats</p>
-              </div>
-              <div className="rounded-2xl border border-white/20 bg-white/10 p-4 backdrop-blur">
-                <Flame size={21} className="text-amber-300" />
-                <p className="mt-4 text-lg font-bold">Ready</p>
-                <p className="mt-1 text-xs text-blue-100">Study activity</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <a
-          href="https://www.assamwork.com/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="group mt-6 block max-w-full overflow-hidden rounded-3xl border border-indigo-200 bg-gradient-to-br from-white via-blue-50 to-indigo-100 p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-xl hover:shadow-indigo-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 sm:p-7"
-          aria-label="Visit AssamWork Store in a new tab"
-        >
-          <div className="flex min-w-0 flex-col justify-between gap-6 sm:flex-row sm:items-center">
-            <div className="flex min-w-0 items-start gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-200 sm:h-14 sm:w-14">
-                <ShoppingBag size={25} />
-              </div>
-
-              <div className="min-w-0">
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-600">
-                  AssamWork Digital Store
-                </p>
-                <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">
-                  Buy AssamWork Study Materials
-                </h2>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-                  Get exam-ready digital bundles, revision notes, PYQs, mock
-                  tests, and high-yield PDFs for Assam competitive exams.
-                </p>
-                <p className="mt-3 flex items-center gap-2 text-xs font-semibold text-emerald-700">
-                  <Download size={15} />
-                  Instant access to digital study materials
-                </p>
-              </div>
-            </div>
-
-            <span className="inline-flex shrink-0 items-center justify-center gap-2 self-start rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition group-hover:bg-indigo-700 sm:self-center">
-              Visit AssamWork Store
-              <ExternalLink size={16} />
-            </span>
-          </div>
-        </a>
-
-        <div className="mt-6 grid gap-6 lg:grid-cols-3">
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 lg:col-span-2">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-bold text-slate-900">Recent chats</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  Continue your latest study conversations.
-                </p>
-              </div>
-              <Clock3 size={20} className="text-slate-400" />
-            </div>
-
-            {recentChats.length > 0 ? (
-              <div className="mt-5 divide-y divide-slate-100">
-                {recentChats.map((chat) => (
-                  <button
-                    key={chat.id}
-                    type="button"
-                    onClick={() => openChat(chat.id)}
-                    className="flex w-full min-w-0 items-center gap-3 py-4 text-left transition hover:text-blue-700"
-                  >
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                      <MessageSquareText size={18} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold">
-                        {chat.title}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {chat.messages.length} messages
-                      </p>
-                    </div>
-                    <ArrowRight size={17} className="shrink-0 text-slate-400" />
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center">
-                <MessageSquareText className="mx-auto text-slate-400" />
-                <p className="mt-3 text-sm font-semibold text-slate-700">
-                  No study chats yet
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  Ask your first question to begin your study activity.
-                </p>
-              </div>
-            )}
-          </section>
-
-          <div className="grid gap-6">
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700">
-                <BookOpenCheck size={21} />
-              </div>
-              <h2 className="mt-4 font-bold text-slate-900">Subjects</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                Subjects from AssamWork&apos;s curated study library will appear
-                here as the exam material collection grows.
-              </p>
-            </section>
-
-            <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 sm:p-6">
-              <ShieldCheck size={24} className="text-emerald-700" />
-              <h2 className="mt-4 font-bold text-emerald-950">
-                Ebook-grounded AI
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-emerald-800">
-                AssamWork AI answers from AssamWork study materials and shows
-                available sources with every answer.
-              </p>
-            </section>
-          </div>
-        </div>
-
-        <section className="mt-8">
-          <div>
-            <p className="text-lg font-bold text-slate-900">Coming soon</p>
-            <p className="mt-1 text-sm text-slate-500">
-              More ways to prepare, revise, and track progress.
-            </p>
-          </div>
-
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {comingSoon.map(({ title, description, icon: Icon, color }) => (
-              <article
-                key={title}
-                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-              >
-                <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${color}`}>
-                  <Icon size={21} />
-                </div>
-                <div className="mt-4 flex items-center gap-2">
-                  <h3 className="font-bold text-slate-900">{title}</h3>
-                  <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                    Soon
-                  </span>
-                </div>
-                <p className="mt-2 text-sm leading-6 text-slate-500">
-                  {description}
-                </p>
-              </article>
             ))}
           </div>
-        </section>
-      </div>
+
+          <a
+            href="https://www.assamwork.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-5 flex w-full max-w-2xl items-center gap-3 rounded-2xl border border-blue-100 bg-white/80 px-4 py-3 text-left shadow-sm transition hover:border-blue-200 hover:bg-blue-50/70"
+          >
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white">
+              <ShoppingBag size={19} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-bold text-slate-900">
+                AssamWork Study Materials
+              </p>
+              <p className="truncate text-xs text-slate-500">
+                Exam-ready PDFs, PYQs, mock tests and revision notes.
+              </p>
+            </div>
+            <span className="shrink-0 rounded-full bg-blue-600 px-3 py-1.5 text-xs font-bold text-white">
+              Explore materials →
+            </span>
+          </a>
+        </div>
+      </main>
+
+      <section className="shrink-0 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6 sm:pb-6">
+        <div className="mx-auto max-w-3xl">
+          <ChatInputBar
+            value={prompt}
+            setValue={setPrompt}
+            onSubmit={sendFromHome}
+            isLoading={isLoading}
+            placeholder="Ask AssamWork AI"
+            ariaLabel="Ask AssamWork AI"
+            helperText="Answers are grounded in AssamWork study materials."
+            sendIcon="arrow"
+          />
+        </div>
+      </section>
     </div>
   );
 }

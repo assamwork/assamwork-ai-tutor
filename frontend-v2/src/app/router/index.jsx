@@ -37,7 +37,7 @@ const Load = (Component) => (
 export const router = createBrowserRouter([
   {
     path: "/",
-    element: <Navigate to="/login" replace />,
+    element: <Navigate to="/study" replace />,
   },
 
   {

@@ -40,7 +40,7 @@ export default function AuthPage() {
 
   useEffect(() => {
     if (user) {
-      navigate("/chat", { replace: true });
+      navigate("/study", { replace: true });
     }
   }, [user, navigate]);
 

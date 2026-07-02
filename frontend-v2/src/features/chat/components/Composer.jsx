@@ -1,13 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import {
-  BookOpenCheck,
-  LoaderCircle,
-  Mic,
-  Paperclip,
-  SendHorizontal,
-} from "lucide-react";
-
+import { useRef } from "react";
 import useChatStore from "../../../store/chatStore";
+import ChatInputBar from "./ChatInputBar";
 
 const API_URL =
   import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
@@ -24,10 +17,7 @@ export default function Composer({
   prompt,
   setPrompt,
 }) {
-  const textareaRef = useRef(null);
   const sendingRef = useRef(false);
-  const noticeTimerRef = useRef(null);
-  const [composerNotice, setComposerNotice] = useState("");
 
   const {
     addUserMessage,
@@ -37,36 +27,6 @@ export default function Composer({
     isLoading,
     setLoading,
   } = useChatStore();
-
-  useEffect(() => {
-    const textarea = textareaRef.current;
-
-    if (!textarea) return;
-
-    textarea.style.height = "auto";
-    textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
-  }, [prompt]);
-
-  useEffect(() => {
-    return () => {
-      if (noticeTimerRef.current) {
-        window.clearTimeout(noticeTimerRef.current);
-      }
-    };
-  }, []);
-
-  function showComposerNotice(message) {
-    setComposerNotice(message);
-
-    if (noticeTimerRef.current) {
-      window.clearTimeout(noticeTimerRef.current);
-    }
-
-    noticeTimerRef.current = window.setTimeout(
-      () => setComposerNotice(""),
-      2600
-    );
-  }
 
   async function sendMessage() {
     if (!prompt.trim() || isLoading || sendingRef.current) return;
@@ -135,88 +95,18 @@ export default function Composer({
     }
   }
 
-  function handleKeyDown(e) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  }
-
   return (
     <div className="relative z-20 shrink-0 border-t border-slate-200 bg-white/95 px-2.5 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-10px_24px_rgba(15,23,42,0.07)] backdrop-blur sm:px-6 sm:py-4 sm:shadow-none">
       <div className="mx-auto max-w-5xl">
-        <div className="flex min-w-0 items-end gap-1.5 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-lg shadow-slate-200/70 transition focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100 sm:gap-3 sm:rounded-3xl sm:p-3">
-
-          <button
-            type="button"
-            onClick={() =>
-              showComposerNotice(
-                "Image and PDF attachments are coming soon."
-              )
-            }
-            aria-label="Image and PDF attachments are coming soon"
-            aria-describedby="composer-notice"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 sm:h-11 sm:w-11 sm:rounded-2xl"
-          >
-            <Paperclip size={18} />
-          </button>
-
-          <textarea
-            ref={textareaRef}
-            rows={1}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={isLoading}
-            aria-label="Ask from AssamWork study materials"
-            aria-describedby="chat-input-helper"
-            placeholder="Ask from AssamWork study materials..."
-            className="max-h-[7.5rem] min-h-10 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1.5 py-2 text-[15px] leading-6 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed sm:min-h-11 sm:max-h-40 sm:px-3 sm:py-2.5 sm:text-base"
-          />
-
-          <button
-            type="button"
-            onClick={() => showComposerNotice("Voice input coming soon.")}
-            aria-label="Voice input coming soon"
-            aria-describedby="composer-notice"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 sm:h-11 sm:w-11 sm:rounded-2xl"
-          >
-            <Mic size={18} />
-          </button>
-
-          <button
-            type="button"
-            onClick={sendMessage}
-            disabled={isLoading || !prompt.trim()}
-            aria-label={isLoading ? "Waiting for answer" : "Send message"}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none sm:h-11 sm:w-11 sm:rounded-2xl"
-          >
-            {isLoading ? (
-              <LoaderCircle size={19} className="animate-spin" />
-            ) : (
-              <SendHorizontal size={19} />
-            )}
-          </button>
-
-        </div>
-
-        {composerNotice && (
-          <p
-            id="composer-notice"
-            role="status"
-            className="absolute bottom-full left-3 right-3 mb-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-center text-xs font-medium text-blue-700 shadow-sm"
-          >
-            {composerNotice}
-          </p>
-        )}
-
-        <p
-          id="chat-input-helper"
-          className="mt-2 hidden items-center justify-center gap-1.5 text-center text-[11px] text-slate-500 sm:flex sm:text-xs"
-        >
-          <BookOpenCheck size={13} className="text-emerald-600" />
-          Answers are grounded in AssamWork study materials. Verify important information.
-        </p>
+        <ChatInputBar
+          value={prompt}
+          setValue={setPrompt}
+          onSubmit={sendMessage}
+          isLoading={isLoading}
+          placeholder="Ask from AssamWork study materials..."
+          ariaLabel="Ask from AssamWork study materials"
+          helperText="Answers are grounded in AssamWork study materials. Verify important information."
+        />
       </div>
     </div>
   );

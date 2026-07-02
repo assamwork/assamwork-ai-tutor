@@ -41,6 +41,83 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+html[data-font-style="system"] body {
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+html[data-font-style="modern"] body {
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  letter-spacing: -0.01em;
+}
+
+html[data-theme="dark"] body {
+  background: #020617;
+  color: #e2e8f0;
+}
+
+html[data-theme="dark"] .bg-white,
+html[data-theme="dark"] .bg-white\/80,
+html[data-theme="dark"] .bg-white\/90,
+html[data-theme="dark"] .bg-white\/95 {
+  background-color: rgb(15 23 42 / 0.94) !important;
+}
+
+html[data-theme="dark"] .bg-slate-50,
+html[data-theme="dark"] .bg-slate-100 {
+  background-color: #0f172a !important;
+}
+
+html[data-theme="dark"] .bg-blue-50,
+html[data-theme="dark"] .bg-blue-50\/70,
+html[data-theme="dark"] .bg-blue-100 {
+  background-color: rgb(30 58 138 / 0.24) !important;
+}
+
+html[data-theme="dark"] .bg-red-50 {
+  background-color: rgb(127 29 29 / 0.22) !important;
+}
+
+html[data-theme="dark"] .bg-emerald-50 {
+  background-color: rgb(6 78 59 / 0.22) !important;
+}
+
+html[data-theme="dark"] .text-slate-950,
+html[data-theme="dark"] .text-slate-900,
+html[data-theme="dark"] .text-slate-800,
+html[data-theme="dark"] .text-slate-700 {
+  color: #e2e8f0 !important;
+}
+
+html[data-theme="dark"] .text-slate-600,
+html[data-theme="dark"] .text-slate-500,
+html[data-theme="dark"] .text-slate-400 {
+  color: #94a3b8 !important;
+}
+
+html[data-theme="dark"] .border-slate-100,
+html[data-theme="dark"] .border-slate-200,
+html[data-theme="dark"] .border-slate-300 {
+  border-color: #334155 !important;
+}
+
+html[data-theme="dark"] .shadow-slate-200\/70,
+html[data-theme="dark"] .shadow-slate-200\/80,
+html[data-theme="dark"] .shadow-slate-950\/10 {
+  --tw-shadow-color: rgb(2 6 23 / 0.45) !important;
+}
+
 * {
   box-sizing: border-box;
 }

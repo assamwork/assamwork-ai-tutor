@@ -35,7 +35,7 @@ export default function ChatHeader({ title, onOpenSidebar }) {
         <button
           type="button"
           onClick={() => navigate("/study")}
-          aria-label="Go to Study Dashboard"
+          aria-label="Go to Home"
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-100 bg-blue-50 text-blue-700 transition hover:bg-blue-100 md:hidden"
         >
           <Home size={17} />
