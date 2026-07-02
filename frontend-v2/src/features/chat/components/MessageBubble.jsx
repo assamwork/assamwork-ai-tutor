@@ -148,7 +148,9 @@ export default function MessageBubble({ message }) {
                     size={17}
                     className="shrink-0 text-emerald-600"
                   />
-                  <span className="min-w-0">Sources from uploaded ebooks</span>
+                  <span className="min-w-0">
+                    Sources from AssamWork study materials
+                  </span>
                 </h4>
 
                 {hasSources && (

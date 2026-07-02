@@ -113,7 +113,7 @@ export default function SettingsPage() {
                 />
                 <div>
                   <p className="text-sm font-bold text-emerald-950">
-                    Answer only from uploaded ebooks
+                    Answer only from AssamWork study materials
                   </p>
                   <p className="mt-1 text-xs leading-5 text-emerald-800">
                     This trust setting is always enabled for AssamWork AI.
@@ -123,7 +123,7 @@ export default function SettingsPage() {
               <div
                 role="switch"
                 aria-checked="true"
-                aria-label="Answer only from uploaded ebooks, enabled and locked"
+                aria-label="Answer only from AssamWork study materials, enabled and locked"
                 className="flex h-7 w-12 shrink-0 items-center justify-end rounded-full bg-emerald-600 p-1"
               >
                 <span className="h-5 w-5 rounded-full bg-white shadow-sm" />

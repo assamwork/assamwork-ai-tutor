@@ -83,8 +83,8 @@ export default function StudyPage() {
                 Welcome back, {firstName}
               </h1>
               <p className="mt-3 max-w-xl text-sm leading-6 text-blue-100 sm:text-base">
-                Continue learning with answers grounded in your uploaded
-                ebooks and built for competitive exam preparation.
+                Continue learning with answers grounded in AssamWork study
+                materials and built for competitive exam preparation.
               </p>
               <button
                 type="button"
@@ -205,8 +205,8 @@ export default function StudyPage() {
               </div>
               <h2 className="mt-4 font-bold text-slate-900">Subjects</h2>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Subjects from your uploaded study library will appear here as
-                your ebook collection grows.
+                Subjects from AssamWork&apos;s curated study library will appear
+                here as the exam material collection grows.
               </p>
             </section>
 
@@ -216,7 +216,7 @@ export default function StudyPage() {
                 Ebook-grounded AI
               </h2>
               <p className="mt-2 text-sm leading-6 text-emerald-800">
-                AssamWork AI answers only from uploaded ebooks and shows
+                AssamWork AI answers from AssamWork study materials and shows
                 available sources with every answer.
               </p>
             </section>

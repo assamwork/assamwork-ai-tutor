@@ -43,7 +43,7 @@ export default function ChatHeader({ title, onOpenSidebar }) {
 
         <div className="hidden max-w-sm items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800 md:flex">
           <ShieldCheck size={16} className="shrink-0" />
-          Answers are generated only from AssamWork uploaded ebooks.
+          Answers are generated from AssamWork study materials only.
         </div>
       </div>
     </header>

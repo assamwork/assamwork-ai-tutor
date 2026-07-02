@@ -26,7 +26,7 @@ export default function TypingIndicator() {
           />
 
           <span className="ml-2 text-sm text-slate-500">
-            Searching uploaded ebooks...
+            Searching AssamWork study materials...
           </span>
 
         </div>

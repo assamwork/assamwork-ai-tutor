@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { BookOpenCheck, Mic, Paperclip, SendHorizontal } from "lucide-react";
+import {
+  BookOpenCheck,
+  LoaderCircle,
+  Mic,
+  Paperclip,
+  SendHorizontal,
+} from "lucide-react";
 
 import useChatStore from "../../../store/chatStore";
 
@@ -143,8 +149,12 @@ export default function Composer({
 
           <button
             type="button"
-            onClick={() => showComposerNotice("Image upload coming soon.")}
-            aria-label="Image upload coming soon"
+            onClick={() =>
+              showComposerNotice(
+                "Image and PDF attachments are coming soon."
+              )
+            }
+            aria-label="Image and PDF attachments are coming soon"
             aria-describedby="composer-notice"
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 sm:h-11 sm:w-11 sm:rounded-2xl"
           >
@@ -158,9 +168,9 @@ export default function Composer({
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isLoading}
-            aria-label="Ask from your uploaded ebooks"
+            aria-label="Ask from AssamWork study materials"
             aria-describedby="chat-input-helper"
-            placeholder="Ask from your uploaded ebooks..."
+            placeholder="Ask from AssamWork study materials..."
             className="max-h-[7.5rem] min-h-10 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1.5 py-2 text-[15px] leading-6 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed sm:min-h-11 sm:max-h-40 sm:px-3 sm:py-2.5 sm:text-base"
           />
 
@@ -179,9 +189,13 @@ export default function Composer({
             onClick={sendMessage}
             disabled={isLoading || !prompt.trim()}
             aria-label={isLoading ? "Waiting for answer" : "Send message"}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:h-11 sm:w-11 sm:rounded-2xl"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none sm:h-11 sm:w-11 sm:rounded-2xl"
           >
-            <SendHorizontal size={19} />
+            {isLoading ? (
+              <LoaderCircle size={19} className="animate-spin" />
+            ) : (
+              <SendHorizontal size={19} />
+            )}
           </button>
 
         </div>
@@ -201,7 +215,7 @@ export default function Composer({
           className="mt-2 hidden items-center justify-center gap-1.5 text-center text-[11px] text-slate-500 sm:flex sm:text-xs"
         >
           <BookOpenCheck size={13} className="text-emerald-600" />
-          Answers use uploaded ebooks only. Verify important information.
+          Answers are grounded in AssamWork study materials. Verify important information.
         </p>
       </div>
     </div>
