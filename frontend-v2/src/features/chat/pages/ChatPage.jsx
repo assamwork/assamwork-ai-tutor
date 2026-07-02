@@ -29,27 +29,52 @@ export default function ChatPage() {
   const messagesLoading = Boolean(
     activeChatId && messageLoadingIds[activeChatId]
   );
+  const messageCount = activeChat?.messages?.length ?? 0;
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({
-      behavior: "smooth",
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+    const originalBodyOverscroll = document.body.style.overscrollBehavior;
+    const originalHtmlOverscroll =
+      document.documentElement.style.overscrollBehavior;
+
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overscrollBehavior = "none";
+    document.documentElement.style.overscrollBehavior = "none";
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+      document.body.style.overscrollBehavior = originalBodyOverscroll;
+      document.documentElement.style.overscrollBehavior =
+        originalHtmlOverscroll;
+    };
+  }, []);
+
+  useEffect(() => {
+    window.requestAnimationFrame(() => {
+      bottomRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "end",
+      });
     });
-  }, [activeChat?.messages, isLoading]);
+  }, [messageCount, isLoading, loadingChatId]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
+    <div className="flex h-full h-dvh min-h-0 w-full min-w-0 flex-col overflow-hidden bg-slate-50">
 
       <ChatHeader
         title={activeChat?.title ?? "AssamWork AI"}
         onOpenSidebar={layoutContext?.openSidebar}
       />
 
-      <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-smooth">
+      <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain scroll-smooth">
 
-        <div className="mx-auto w-full max-w-5xl px-3 py-5 sm:px-6 sm:py-8 lg:px-8">
+        <div className="mx-auto w-full max-w-5xl px-3 py-4 sm:px-6 sm:py-8 lg:px-8">
 
           {chatsLoading || messagesLoading ? (
-            <div className="mx-auto max-w-3xl py-8" aria-live="polite">
+            <div className="mx-auto max-w-3xl py-6 sm:py-8" aria-live="polite">
               <div className="rounded-3xl border border-slate-200 bg-white p-6 text-center shadow-sm">
                 <div className="mx-auto h-9 w-9 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
                 <p className="mt-4 text-sm font-bold text-slate-800">
@@ -72,7 +97,7 @@ export default function ChatPage() {
             </div>
           ) : activeChat?.messages.length ? (
 
-            <div className="flex flex-col gap-7 sm:gap-9">
+            <div className="flex min-w-0 flex-col gap-5 pb-2 sm:gap-9">
 
               {activeChat.messages.map((message) => (
                 <MessageBubble

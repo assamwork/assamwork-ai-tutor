@@ -5,8 +5,8 @@ export default function ChatHeader({ title, onOpenSidebar }) {
   const navigate = useNavigate();
 
   return (
-    <header className="sticky top-0 z-30 shrink-0 border-b border-slate-200 bg-white/95 pt-[env(safe-area-inset-top)] backdrop-blur">
-      <div className="flex min-h-16 items-center justify-between gap-3 px-3 py-3 sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-30 shrink-0 border-b border-slate-200 bg-white/95 pt-[env(safe-area-inset-top)] shadow-sm shadow-slate-200/60 backdrop-blur lg:shadow-none">
+      <div className="flex min-h-15 items-center justify-between gap-2 px-3 py-2.5 sm:min-h-16 sm:gap-3 sm:px-6 sm:py-3 lg:px-8">
 
         <button
           type="button"
@@ -17,7 +17,7 @@ export default function ChatHeader({ title, onOpenSidebar }) {
           <Menu size={21} />
         </button>
 
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
 
           <h1 className="truncate text-base font-bold text-slate-900 sm:text-lg">
             {title}

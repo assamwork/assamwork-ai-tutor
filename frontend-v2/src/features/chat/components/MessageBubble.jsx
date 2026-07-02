@@ -114,15 +114,15 @@ export default function MessageBubble({ message }) {
   return (
     <div className={`flex min-w-0 ${isUser ? "justify-end" : "justify-start"}`}>
       {!isUser && (
-        <div className="mr-3 mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
-          <Sparkles size={17} />
+        <div className="mr-2 mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm sm:mr-3 sm:h-9 sm:w-9">
+          <Sparkles size={16} />
         </div>
       )}
 
       <div
         className={`min-w-0 overflow-hidden ${
           isUser
-            ? "max-w-[88%] rounded-2xl bg-slate-900 px-4 py-3 text-white shadow-sm sm:max-w-[75%] sm:px-5"
+            ? "max-w-[90%] rounded-2xl bg-slate-900 px-4 py-3 text-white shadow-sm sm:max-w-[75%] sm:px-5"
             : "w-full max-w-4xl"
         }`}
       >
@@ -132,7 +132,7 @@ export default function MessageBubble({ message }) {
           </p>
         ) : (
           <>
-            <article className="min-w-0 overflow-x-auto rounded-2xl border border-slate-200 bg-white px-4 py-5 text-sm leading-7 text-slate-700 shadow-sm sm:px-6 sm:text-base">
+            <article className="min-w-0 overflow-x-auto rounded-2xl border border-slate-200 bg-white px-3.5 py-4 text-sm leading-7 text-slate-700 shadow-sm sm:px-6 sm:py-5 sm:text-base">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={markdownComponents}
@@ -142,13 +142,13 @@ export default function MessageBubble({ message }) {
             </article>
 
             <section className="mt-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
                 <h4 className="flex min-w-0 items-center gap-2 text-sm font-bold text-slate-800">
                   <BookOpenCheck
                     size={17}
                     className="shrink-0 text-emerald-600"
                   />
-                  Sources from uploaded ebooks
+                  <span className="min-w-0">Sources from uploaded ebooks</span>
                 </h4>
 
                 {hasSources && (
