@@ -3,6 +3,17 @@ import { BookOpenCheck, SendHorizontal } from "lucide-react";
 
 import useChatStore from "../../../store/chatStore";
 
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+
+function getFriendlyChatError(error) {
+  if (error?.message === "Unable to get an answer right now.") {
+    return error.message;
+  }
+
+  return "Unable to reach AssamWork AI. Please check your connection and try again.";
+}
+
 export default function Composer({
   prompt,
   setPrompt,
@@ -52,7 +63,7 @@ export default function Composer({
       setPrompt("");
 
       const response = await fetch(
-        "http://127.0.0.1:8000/ask",
+        `${API_URL}/ask`,
         {
           method: "POST",
           headers: {
@@ -65,7 +76,7 @@ export default function Composer({
       );
 
       if (!response.ok) {
-        throw new Error(`Request failed with status ${response.status}`);
+        throw new Error("Unable to get an answer right now.");
       }
 
       const data = await response.json();
@@ -80,13 +91,10 @@ export default function Composer({
         targetChatId
       );
     } catch (err) {
-      console.error(err);
-
       if (targetChatId) {
         await addAssistantMessage(
           {
-            content:
-              "Unable to connect to AssamWork AI backend.",
+            content: getFriendlyChatError(err),
             sources: [],
           },
           targetChatId
@@ -118,6 +126,7 @@ export default function Composer({
             onKeyDown={handleKeyDown}
             disabled={isLoading}
             aria-label="Ask from your uploaded ebooks"
+            aria-describedby="chat-input-helper"
             placeholder="Ask from your uploaded ebooks..."
             className="max-h-40 min-h-11 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2.5 text-sm leading-6 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed sm:px-3 sm:text-base"
           />
@@ -134,7 +143,10 @@ export default function Composer({
 
         </div>
 
-        <p className="mt-2 flex items-center justify-center gap-1.5 text-center text-[11px] text-slate-500 sm:text-xs">
+        <p
+          id="chat-input-helper"
+          className="mt-2 flex items-center justify-center gap-1.5 text-center text-[11px] text-slate-500 sm:text-xs"
+        >
           <BookOpenCheck size={13} className="text-emerald-600" />
           Answers use uploaded ebooks only. Verify important information.
         </p>

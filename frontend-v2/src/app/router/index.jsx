@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from "react";
+import { Suspense, lazy } from "react";
 import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import ProtectedRoute from "./ProtectedRoute";
@@ -14,8 +14,16 @@ const LibraryPage = lazy(() => import("@/features/admin/pages/LibraryPage"));
 
 function Loader() {
   return (
-    <div className="flex h-screen items-center justify-center text-lg font-semibold">
-      Loading AssamWork AI...
+    <div className="flex h-screen items-center justify-center bg-slate-50 px-4">
+      <div className="rounded-3xl border border-slate-200 bg-white px-8 py-7 text-center shadow-sm">
+        <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+        <p className="mt-4 text-sm font-bold text-slate-900">
+          Loading AssamWork AI
+        </p>
+        <p className="mt-1 text-xs text-slate-500">
+          Opening your study workspace…
+        </p>
+      </div>
     </div>
   );
 }

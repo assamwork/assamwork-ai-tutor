@@ -10,6 +10,29 @@ import {
   registerWithEmail,
 } from "../services/auth";
 
+function getAuthErrorMessage(error) {
+  switch (error?.code) {
+    case "auth/invalid-credential":
+    case "auth/wrong-password":
+    case "auth/user-not-found":
+      return "Email or password is incorrect.";
+    case "auth/email-already-in-use":
+      return "An account already exists with this email.";
+    case "auth/weak-password":
+      return "Use a stronger password with at least 6 characters.";
+    case "auth/invalid-email":
+      return "Enter a valid email address.";
+    case "auth/popup-closed-by-user":
+      return "Google sign-in was closed before it finished.";
+    case "auth/network-request-failed":
+      return "Unable to reach Firebase. Check your connection and try again.";
+    case "auth/too-many-requests":
+      return "Too many attempts. Please wait a little and try again.";
+    default:
+      return "Sign-in failed. Please try again.";
+  }
+}
+
 export default function AuthPage() {
   const navigate = useNavigate();
 
@@ -36,8 +59,7 @@ export default function AuthPage() {
 
       await loginWithGoogle();
     } catch (e) {
-      console.error(e);
-      setError(e.message);
+      setError(getAuthErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -56,8 +78,7 @@ export default function AuthPage() {
         await registerWithEmail(email, password);
       }
     } catch (e) {
-      console.error(e);
-      setError(e.message);
+      setError(getAuthErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -90,9 +111,9 @@ export default function AuthPage() {
 
       {/* Right */}
 
-      <div className="flex flex-1 items-center justify-center bg-slate-100 p-8">
+      <div className="flex flex-1 items-center justify-center bg-slate-100 p-4 sm:p-8">
 
-        <div className="w-full max-w-md rounded-3xl bg-white p-10 shadow-xl">
+        <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl shadow-slate-200/70 sm:p-10">
 
           <h2 className="text-3xl font-bold">
             {isLogin ? "Welcome Back" : "Create Account"}
@@ -103,9 +124,10 @@ export default function AuthPage() {
           </p>
 
           <button
+            type="button"
             onClick={handleGoogle}
             disabled={loading}
-            className="mt-8 flex w-full items-center justify-center gap-3 rounded-xl border border-slate-300 py-3 hover:bg-slate-100"
+            className="mt-8 flex min-h-12 w-full items-center justify-center gap-3 rounded-xl border border-slate-300 py-3 font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <img
               src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
@@ -113,7 +135,7 @@ export default function AuthPage() {
               className="h-5 w-5"
             />
 
-            Continue with Google
+            {loading ? "Please wait…" : "Continue with Google"}
 
           </button>
 
@@ -128,10 +150,12 @@ export default function AuthPage() {
 
             <div className="flex items-center gap-3 rounded-xl border border-slate-300 px-4">
 
-              <Mail size={18} />
+              <Mail size={18} className="text-slate-500" />
 
               <input
                 type="email"
+                required
+                autoComplete="email"
                 placeholder="Email"
                 className="w-full py-4 outline-none"
                 value={email}
@@ -144,10 +168,12 @@ export default function AuthPage() {
 
             <div className="flex items-center gap-3 rounded-xl border border-slate-300 px-4">
 
-              <Lock size={18} />
+              <Lock size={18} className="text-slate-500" />
 
               <input
                 type="password"
+                required
+                autoComplete={isLogin ? "current-password" : "new-password"}
                 placeholder="Password"
                 className="w-full py-4 outline-none"
                 value={password}
@@ -159,7 +185,10 @@ export default function AuthPage() {
             </div>
 
             {error && (
-              <p className="text-sm text-red-600">
+              <p
+                role="alert"
+                className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+              >
                 {error}
               </p>
             )}
@@ -167,7 +196,7 @@ export default function AuthPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl bg-blue-600 py-4 font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              className="w-full rounded-xl bg-blue-600 py-4 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading
                 ? "Please wait..."
@@ -179,9 +208,11 @@ export default function AuthPage() {
           </form>
 
           <button
-            onClick={() =>
-              setIsLogin(!isLogin)
-            }
+            type="button"
+            onClick={() => {
+              setIsLogin(!isLogin);
+              setError("");
+            }}
             className="mt-8 w-full text-center text-blue-600 hover:underline"
           >
             {isLogin

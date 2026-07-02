@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: assamwork-ai-api
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: HF_TOKEN
+        sync: false

@@ -45,7 +45,12 @@ indexing_state = {
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"http://localhost:\d+",
+    allow_origin_regex=(
+        r"^http://localhost:\d+$|"
+        r"^http://127\.0\.0\.1:\d+$|"
+        r"^https://ai\.assamwork\.com$|"
+        r"^https://.*\.vercel\.app$"
+    ),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -80,10 +85,7 @@ def require_admin(authorization: str | None = Header(default=None)):
             detail="Authorization must use a Bearer token.",
         )
 
-    project_id = os.getenv(
-        "FIREBASE_PROJECT_ID",
-        "assamwork-ai",
-    ).strip()
+    project_id = os.getenv("FIREBASE_PROJECT_ID", "").strip()
     admin_emails = {
         email.strip().lower()
         for email in os.getenv("ADMIN_EMAILS", "").split(",")
@@ -94,6 +96,12 @@ def require_admin(authorization: str | None = Header(default=None)):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Backend admin access is not configured.",
+        )
+
+    if not project_id:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Firebase project ID is not configured.",
         )
 
     try:

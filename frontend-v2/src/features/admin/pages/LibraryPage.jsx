@@ -90,6 +90,35 @@ function statusLabel(status) {
   return status || "Unknown";
 }
 
+function healthStyles(label, value) {
+  const normalized = String(value || "").toLowerCase();
+
+  if (
+    ["Backend", "RAG", "ChromaDB"].includes(label) &&
+    ["online", "ready", "healthy"].includes(normalized)
+  ) {
+    return {
+      card: "border-emerald-200 bg-emerald-50",
+      icon: "text-emerald-600",
+      value: "text-emerald-800",
+    };
+  }
+
+  if (normalized === "unknown" || normalized === "not_ready") {
+    return {
+      card: "border-amber-200 bg-amber-50",
+      icon: "text-amber-600",
+      value: "text-amber-800",
+    };
+  }
+
+  return {
+    card: "border-slate-200 bg-slate-50",
+    icon: "text-slate-500",
+    value: "text-slate-800",
+  };
+}
+
 export default function LibraryPage() {
   const [books, setBooks] = useState([]);
   const [query, setQuery] = useState("");
@@ -105,7 +134,7 @@ export default function LibraryPage() {
   const [uploadMessage, setUploadMessage] = useState(null);
   const [fileInputKey, setFileInputKey] = useState(0);
   const [deletingBook, setDeletingBook] = useState("");
-  const [deleteMessage, setDeleteMessage] = useState("");
+  const [deleteMessage, setDeleteMessage] = useState(null);
   const [indexing, setIndexing] = useState(false);
   const [indexMessage, setIndexMessage] = useState(null);
   const [systemStatus, setSystemStatus] = useState(null);
@@ -195,7 +224,7 @@ export default function LibraryPage() {
 
     const bookKey = `${book.subject}/${book.book}`;
     setDeletingBook(bookKey);
-    setDeleteMessage("");
+    setDeleteMessage(null);
 
     try {
       const result = await deleteBook({
@@ -212,16 +241,19 @@ export default function LibraryPage() {
             )
         )
       );
-      setDeleteMessage(
-        result.vectorCleanup === "pending"
-          ? "Ebook deleted. Vector cleanup is pending."
-          : "Ebook deleted."
-      );
+      setDeleteMessage({
+        type: "success",
+        text:
+          result.vectorCleanup === "pending"
+            ? "Ebook deleted. Vector cleanup is pending."
+            : "Ebook deleted.",
+      });
       retry();
     } catch (deleteError) {
-      setDeleteMessage(
-        deleteError.message || "The ebook could not be deleted."
-      );
+      setDeleteMessage({
+        type: "error",
+        text: deleteError.message || "The ebook could not be deleted.",
+      });
     } finally {
       setDeletingBook("");
     }
@@ -353,7 +385,6 @@ export default function LibraryPage() {
         setBooks(library);
       } catch (loadError) {
         if (loadError.name !== "AbortError") {
-          console.error(loadError);
           setError(
             "The ebook library could not be loaded. Check the backend and try again."
           );
@@ -552,18 +583,25 @@ export default function LibraryPage() {
                 value: formatDate(systemStatus?.lastIndexed),
                 icon: CalendarClock,
               },
-            ].map(({ label, value, icon: Icon }) => (
-              <div
-                key={label}
-                className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3"
-              >
-                <Icon size={16} className="text-slate-500" />
-                <p className="mt-3 truncate text-sm font-bold capitalize text-slate-800" title={String(value)}>
-                  {String(value).replace("_", " ")}
-                </p>
-                <p className="mt-1 text-[11px] text-slate-500">{label}</p>
-              </div>
-            ))}
+            ].map(({ label, value, icon: Icon }) => {
+              const tone = healthStyles(label, value);
+
+              return (
+                <div
+                  key={label}
+                  className={`min-w-0 rounded-xl border p-3 ${tone.card}`}
+                >
+                  <Icon size={16} className={tone.icon} />
+                  <p
+                    className={`mt-3 truncate text-sm font-bold capitalize ${tone.value}`}
+                    title={String(value)}
+                  >
+                    {String(value).replace("_", " ")}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-500">{label}</p>
+                </div>
+              );
+            })}
           </div>
         </section>
 
@@ -729,6 +767,9 @@ export default function LibraryPage() {
               className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
                 indexMessage.type === "success"
                   ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                  : indexMessage.type === "running" ||
+                    indexMessage.type === "pending"
+                  ? "border-violet-200 bg-violet-50 text-violet-800"
                   : "border-red-200 bg-red-50 text-red-700"
               }`}
             >
@@ -741,8 +782,15 @@ export default function LibraryPage() {
         </section>
 
         {deleteMessage && (
-          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            {deleteMessage}
+          <div
+            role="status"
+            className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
+              deleteMessage.type === "success"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : "border-red-200 bg-red-50 text-red-700"
+            }`}
+          >
+            {deleteMessage.text}
           </div>
         )}
 

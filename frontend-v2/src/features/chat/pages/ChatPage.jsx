@@ -46,14 +46,25 @@ export default function ChatPage() {
         <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
 
           {chatsLoading || messagesLoading ? (
-            <div className="flex min-h-64 items-center justify-center">
-              <div className="text-center">
-                <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
-                <p className="mt-3 text-sm font-medium text-slate-500">
+            <div className="mx-auto max-w-3xl py-8" aria-live="polite">
+              <div className="rounded-3xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+                <div className="mx-auto h-9 w-9 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                <p className="mt-4 text-sm font-bold text-slate-800">
                   {chatsLoading
                     ? "Loading cloud chats..."
                     : "Loading messages..."}
                 </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Preparing your ebook-grounded study workspace.
+                </p>
+                <div className="mt-6 space-y-3 text-left">
+                  {[0, 1, 2].map((item) => (
+                    <div
+                      key={item}
+                      className="h-14 animate-pulse rounded-2xl bg-slate-100"
+                    />
+                  ))}
+                </div>
               </div>
             </div>
           ) : activeChat?.messages.length ? (

@@ -11,6 +11,98 @@ import {
 
 import MessageActions from "./MessageActions";
 
+const markdownComponents = {
+  h1: ({ children }) => (
+    <h1 className="mb-3 mt-1 text-2xl font-bold leading-tight text-slate-950">
+      {children}
+    </h1>
+  ),
+  h2: ({ children }) => (
+    <h2 className="mb-3 mt-5 text-xl font-bold leading-tight text-slate-950">
+      {children}
+    </h2>
+  ),
+  h3: ({ children }) => (
+    <h3 className="mb-2 mt-4 text-lg font-bold leading-tight text-slate-900">
+      {children}
+    </h3>
+  ),
+  p: ({ children }) => (
+    <p className="mb-3 last:mb-0">
+      {children}
+    </p>
+  ),
+  ul: ({ children }) => (
+    <ul className="mb-4 ml-5 list-disc space-y-1.5 last:mb-0">
+      {children}
+    </ul>
+  ),
+  ol: ({ children }) => (
+    <ol className="mb-4 ml-5 list-decimal space-y-1.5 last:mb-0">
+      {children}
+    </ol>
+  ),
+  li: ({ children }) => (
+    <li className="pl-1">
+      {children}
+    </li>
+  ),
+  blockquote: ({ children }) => (
+    <blockquote className="my-4 rounded-r-xl border-l-4 border-blue-200 bg-blue-50/60 px-4 py-3 text-slate-700">
+      {children}
+    </blockquote>
+  ),
+  a: ({ children, href }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="font-semibold text-blue-700 underline decoration-blue-200 underline-offset-4 hover:text-blue-800"
+    >
+      {children}
+    </a>
+  ),
+  table: ({ children }) => (
+    <div className="my-4 overflow-x-auto rounded-xl border border-slate-200">
+      <table className="min-w-full border-collapse text-left text-sm">
+        {children}
+      </table>
+    </div>
+  ),
+  th: ({ children }) => (
+    <th className="border-b border-r border-slate-200 bg-slate-50 px-3 py-2 font-semibold text-slate-800 last:border-r-0">
+      {children}
+    </th>
+  ),
+  td: ({ children }) => (
+    <td className="border-b border-r border-slate-200 px-3 py-2 align-top last:border-r-0">
+      {children}
+    </td>
+  ),
+  pre: ({ children }) => (
+    <pre className="my-4 overflow-x-auto rounded-xl bg-slate-950 p-4 text-sm leading-6 text-slate-100 shadow-inner">
+      {children}
+    </pre>
+  ),
+  code: ({ children, className }) => {
+    const isBlockCode = Boolean(className);
+
+    if (isBlockCode) {
+      return (
+        <code className={`${className} whitespace-pre text-slate-100`}>
+          {children}
+        </code>
+      );
+    }
+
+    return (
+      <code className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[0.92em] font-semibold text-slate-800">
+        {children}
+      </code>
+    );
+  },
+};
+
 export default function MessageBubble({ message }) {
   const isUser = message.role === "user";
   const [sourcesOpen, setSourcesOpen] = useState(true);
@@ -43,30 +135,7 @@ export default function MessageBubble({ message }) {
             <article className="min-w-0 overflow-x-auto rounded-2xl border border-slate-200 bg-white px-4 py-5 text-sm leading-7 text-slate-700 shadow-sm sm:px-6 sm:text-base">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
-                components={{
-                  table: ({ children }) => (
-                    <div className="my-4 overflow-x-auto">
-                      <table className="min-w-full border-collapse text-left text-sm">
-                        {children}
-                      </table>
-                    </div>
-                  ),
-                  th: ({ children }) => (
-                    <th className="border border-slate-200 bg-slate-50 px-3 py-2 font-semibold">
-                      {children}
-                    </th>
-                  ),
-                  td: ({ children }) => (
-                    <td className="border border-slate-200 px-3 py-2 align-top">
-                      {children}
-                    </td>
-                  ),
-                  pre: ({ children }) => (
-                    <pre className="my-4 overflow-x-auto rounded-xl bg-slate-950 p-4 text-sm text-slate-100">
-                      {children}
-                    </pre>
-                  ),
-                }}
+                components={markdownComponents}
               >
                 {message.content}
               </ReactMarkdown>

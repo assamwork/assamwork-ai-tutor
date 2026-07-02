@@ -1,5 +1,8 @@
 import useChatActions from "./useChatActions";
 
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+
 export default function useCloudComposer() {
   const {
     activeChat,
@@ -13,7 +16,7 @@ export default function useCloudComposer() {
     await sendUserMessage(question);
 
     const response = await fetch(
-      "http://127.0.0.1:8000/ask",
+      `${API_URL}/ask`,
       {
         method: "POST",
         headers: {

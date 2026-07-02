@@ -43,8 +43,9 @@ export async function getLibrary({ signal } = {}) {
   });
 
   if (!response.ok) {
-    throw new Error(
-      `Unable to load library (HTTP ${response.status})`
+    throw await requestError(
+      response,
+      "Unable to load the ebook library. Please try again."
     );
   }
 
@@ -75,7 +76,7 @@ export async function uploadBook({ file, subject, signal } = {}) {
   if (!response.ok) {
     throw await requestError(
       response,
-      `Upload failed (HTTP ${response.status})`
+      "Upload failed. Please try again."
     );
   }
 
@@ -100,7 +101,7 @@ export async function deleteBook({ subject, book, signal } = {}) {
   if (!response.ok) {
     throw await requestError(
       response,
-      `Delete failed (HTTP ${response.status})`
+      "Delete failed. Please try again."
     );
   }
 
@@ -120,7 +121,7 @@ export async function reindexLibrary({ signal } = {}) {
   if (!response.ok) {
     throw await requestError(
       response,
-      `Re-index failed (HTTP ${response.status})`
+      "Re-index failed. Check backend logs and try again."
     );
   }
 
@@ -142,7 +143,7 @@ export async function getReindexStatus({ signal } = {}) {
   if (!response.ok) {
     throw await requestError(
       response,
-      `Unable to load indexing status (HTTP ${response.status})`
+      "Unable to load indexing status."
     );
   }
 
@@ -161,7 +162,7 @@ export async function getSystemStatus({ signal } = {}) {
   if (!response.ok) {
     throw await requestError(
       response,
-      `Unable to load system status (HTTP ${response.status})`
+      "Unable to load system status."
     );
   }
 
