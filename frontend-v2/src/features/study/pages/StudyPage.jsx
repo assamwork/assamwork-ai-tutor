@@ -71,11 +71,11 @@ export default function StudyPage() {
   ];
 
   return (
-    <div className="h-full overflow-y-auto bg-slate-50">
-      <div className="mx-auto max-w-7xl px-4 pb-10 pt-20 sm:px-6 sm:pt-20 lg:px-8 lg:pt-8">
-        <section className="overflow-hidden rounded-3xl bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-700 p-6 text-white shadow-xl shadow-blue-200/60 sm:p-8 lg:p-10">
-          <div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-center">
-            <div className="max-w-2xl">
+    <div className="h-full max-w-full overflow-y-auto overflow-x-hidden bg-slate-50">
+      <div className="mx-auto max-w-7xl overflow-x-hidden px-4 pb-10 pt-20 sm:px-6 sm:pt-20 lg:px-8 lg:pt-8">
+        <section className="max-w-full overflow-hidden rounded-3xl bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-700 p-6 text-white shadow-xl shadow-blue-200/60 sm:p-8 lg:p-10">
+          <div className="flex min-w-0 flex-col justify-between gap-8 lg:flex-row lg:items-center">
+            <div className="min-w-0 max-w-2xl">
               <p className="text-sm font-semibold text-blue-100">
                 Study dashboard
               </p>
@@ -96,7 +96,7 @@ export default function StudyPage() {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 sm:min-w-80">
+            <div className="grid min-w-0 grid-cols-2 gap-3 sm:min-w-80">
               <div className="rounded-2xl border border-white/20 bg-white/10 p-4 backdrop-blur">
                 <MessageSquareText size={21} className="text-blue-100" />
                 <p className="mt-4 text-3xl font-bold">{totalChats}</p>
@@ -115,10 +115,10 @@ export default function StudyPage() {
           href="https://www.assamwork.com/"
           target="_blank"
           rel="noopener noreferrer"
-          className="group mt-6 block overflow-hidden rounded-3xl border border-indigo-200 bg-gradient-to-br from-white via-blue-50 to-indigo-100 p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-xl hover:shadow-indigo-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 sm:p-7"
+          className="group mt-6 block max-w-full overflow-hidden rounded-3xl border border-indigo-200 bg-gradient-to-br from-white via-blue-50 to-indigo-100 p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-xl hover:shadow-indigo-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 sm:p-7"
           aria-label="Visit AssamWork Store in a new tab"
         >
-          <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-center">
+          <div className="flex min-w-0 flex-col justify-between gap-6 sm:flex-row sm:items-center">
             <div className="flex min-w-0 items-start gap-4">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-200 sm:h-14 sm:w-14">
                 <ShoppingBag size={25} />

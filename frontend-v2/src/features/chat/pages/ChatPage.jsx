@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useOutletContext } from "react-router-dom";
+import { X } from "lucide-react";
 
 import useChatStore from "../../../store/chatStore";
 
@@ -9,27 +10,42 @@ import MessageBubble from "../components/MessageBubble";
 import TypingIndicator from "../components/TypingIndicator";
 import WelcomeScreen from "../components/WelcomeScreen";
 
-function StoreRecommendation() {
+function StoreRecommendation({ onDismiss }) {
   return (
-    <a
-      href="https://www.assamwork.com/"
-      target="_blank"
-      rel="noopener noreferrer"
-      className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 rounded-2xl border border-blue-100 bg-white/80 px-4 py-3 text-left shadow-sm transition hover:border-blue-200 hover:bg-blue-50/70 hover:shadow-md"
-      aria-label="Explore AssamWork study materials in a new tab"
-    >
-      <div className="min-w-0">
-        <p className="text-sm font-bold text-slate-900">
+    <div className="mx-auto flex w-full max-w-2xl items-center gap-2 rounded-2xl border border-blue-100 bg-white/80 px-3 py-2.5 text-left shadow-sm">
+      <a
+        href="https://www.assamwork.com/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="min-w-0 flex-1"
+        aria-label="Explore AssamWork study materials in a new tab"
+      >
+        <p className="truncate text-sm font-bold text-slate-900">
           Need complete study materials?
         </p>
         <p className="mt-0.5 truncate text-xs text-slate-500">
-          Explore AssamWork exam bundles and high-yield PDFs.
+          AssamWork exam bundles and PDFs.
         </p>
-      </div>
-      <span className="shrink-0 rounded-full bg-blue-600 px-3 py-1.5 text-xs font-bold text-white">
+      </a>
+
+      <a
+        href="https://www.assamwork.com/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="shrink-0 rounded-full bg-blue-600 px-3 py-1.5 text-xs font-bold text-white"
+      >
         Explore
-      </span>
-    </a>
+      </a>
+
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Dismiss study materials recommendation"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+      >
+        <X size={15} />
+      </button>
+    </div>
   );
 }
 
@@ -51,10 +67,15 @@ export default function ChatPage() {
   const bottomRef = useRef(null);
   const [prompt, setPrompt] = useState("");
   const [viewportHeight, setViewportHeight] = useState("100dvh");
+  const [showStoreRecommendation, setShowStoreRecommendation] =
+    useState(true);
   const messagesLoading = Boolean(
     activeChatId && messageLoadingIds[activeChatId]
   );
   const messageCount = activeChat?.messages?.length ?? 0;
+  const firstAssistantIndex = activeChat?.messages?.findIndex(
+    (item) => item.role === "assistant"
+  );
 
   useEffect(() => {
     function updateViewportHeight() {
@@ -115,6 +136,10 @@ export default function ChatPage() {
     });
   }, [messageCount, isLoading, loadingChatId]);
 
+  useEffect(() => {
+    setShowStoreRecommendation(true);
+  }, [activeChatId]);
+
   return (
     <div
       className="flex min-h-0 w-full min-w-0 flex-col overflow-hidden bg-slate-50 lg:h-full"
@@ -166,12 +191,16 @@ export default function ChatPage() {
               {activeChat.messages.map((message, index) => (
                 <div key={message.id} className="min-w-0">
                   <MessageBubble message={message} />
-                  {message.role === "assistant" &&
-                    activeChat.messages.findIndex(
-                      (item) => item.role === "assistant"
-                    ) === index && (
+                  {showStoreRecommendation &&
+                    message.role === "assistant" &&
+                    firstAssistantIndex === index &&
+                    activeChat.messages.length > 2 && (
                       <div className="mt-4">
-                        <StoreRecommendation />
+                        <StoreRecommendation
+                          onDismiss={() =>
+                            setShowStoreRecommendation(false)
+                          }
+                        />
                       </div>
                     )}
                 </div>

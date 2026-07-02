@@ -154,14 +154,14 @@ export default function Sidebar({ isOpen, onClose }) {
       />
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[min(18rem,88vw)] flex-col border-r border-slate-200 bg-white shadow-2xl shadow-slate-950/10 transition-transform duration-200 lg:static lg:z-auto lg:w-72 lg:translate-x-0 lg:shadow-none ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-[min(18rem,86vw)] max-w-[86vw] flex-col overflow-hidden border-r border-slate-200 bg-white shadow-2xl shadow-slate-950/10 transition-transform duration-200 lg:static lg:z-auto lg:w-72 lg:max-w-none lg:translate-x-0 lg:shadow-none ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
 
       {/* Logo */}
 
-      <div className="border-b border-slate-200 p-6">
+      <div className="min-w-0 border-b border-slate-200 p-5 sm:p-6">
 
         <div className="flex items-center gap-3">
 
@@ -169,12 +169,12 @@ export default function Sidebar({ isOpen, onClose }) {
             ⚡
           </div>
 
-          <div>
-            <h1 className="text-lg font-bold">
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-bold">
               AssamWork AI
             </h1>
 
-            <p className="text-sm text-slate-500">
+            <p className="truncate text-sm text-slate-500">
               AI Tutor
             </p>
           </div>
@@ -202,7 +202,7 @@ export default function Sidebar({ isOpen, onClose }) {
 
       {/* Chats */}
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="min-w-0 flex-1 overflow-y-auto p-4">
 
         <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
           Chats
@@ -338,14 +338,14 @@ export default function Sidebar({ isOpen, onClose }) {
               key={label}
               type="button"
               onClick={() => goTo(path)}
-              className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 transition ${
+              className={`flex w-full min-w-0 items-center gap-3 rounded-xl px-4 py-3 transition ${
                 location.pathname === path
                   ? "bg-blue-50 text-blue-700"
                   : "text-slate-700 hover:bg-slate-100"
               }`}
             >
               <Icon size={20} className="shrink-0" />
-              <span>{label}</span>
+              <span className="truncate">{label}</span>
             </button>
           ))}
 
@@ -360,14 +360,14 @@ export default function Sidebar({ isOpen, onClose }) {
             <button
               type="button"
               onClick={() => goTo("/admin/library")}
-              className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 transition ${
+              className={`flex w-full min-w-0 items-center gap-3 rounded-xl px-4 py-3 transition ${
                 location.pathname === "/admin/library"
                   ? "bg-blue-50 text-blue-700"
                   : "text-slate-700 hover:bg-slate-100"
               }`}
             >
               <LibraryBig size={20} className="shrink-0" />
-              <span>Ebook Library</span>
+              <span className="truncate">Ebook Library</span>
             </button>
           </>
         )}

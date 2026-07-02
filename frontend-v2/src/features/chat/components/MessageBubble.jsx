@@ -112,7 +112,7 @@ export default function MessageBubble({ message }) {
   const hasSources = sources.length > 0;
 
   return (
-    <div className={`flex min-w-0 ${isUser ? "justify-end" : "justify-start"}`}>
+    <div className={`flex max-w-full min-w-0 ${isUser ? "justify-end" : "justify-start"}`}>
       {!isUser && (
         <div className="mr-2 mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm sm:mr-3 sm:h-9 sm:w-9">
           <Sparkles size={16} />
@@ -122,8 +122,8 @@ export default function MessageBubble({ message }) {
       <div
         className={`min-w-0 overflow-hidden ${
           isUser
-            ? "max-w-[90%] rounded-2xl bg-slate-900 px-4 py-3 text-white shadow-sm sm:max-w-[75%] sm:px-5"
-            : "w-full max-w-4xl"
+            ? "max-w-[82%] rounded-2xl bg-slate-900 px-4 py-3 text-white shadow-sm sm:max-w-[75%] sm:px-5"
+            : "max-w-full flex-1 sm:max-w-4xl"
         }`}
       >
         {isUser ? (
@@ -141,11 +141,11 @@ export default function MessageBubble({ message }) {
               </ReactMarkdown>
             </article>
 
-            <section className="mt-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+            <section className="mt-2 rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm sm:mt-3 sm:p-4">
               <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
-                <h4 className="flex min-w-0 items-center gap-2 text-sm font-bold text-slate-800">
+                <h4 className="flex min-w-0 items-center gap-2 text-xs font-bold text-slate-800 sm:text-sm">
                   <BookOpenCheck
-                    size={17}
+                    size={16}
                     className="shrink-0 text-emerald-600"
                   />
                   <span className="min-w-0">
@@ -158,7 +158,7 @@ export default function MessageBubble({ message }) {
                     type="button"
                     onClick={() => setSourcesOpen((open) => !open)}
                     aria-expanded={sourcesOpen}
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                    className="inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 sm:px-2.5 sm:py-1.5 sm:text-xs"
                   >
                     {sourcesOpen ? (
                       <>
@@ -177,37 +177,37 @@ export default function MessageBubble({ message }) {
 
               {hasSources ? (
                 sourcesOpen && (
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div className="mt-2 grid gap-2 sm:mt-3 sm:grid-cols-2 sm:gap-3">
                     {sources.map((source, index) => (
                     <div
                       key={`${source.subject ?? "subject"}-${source.book ?? "book"}-${index}`}
-                      className="min-w-0 rounded-xl border border-slate-200 bg-slate-50/80 p-3.5"
+                      className="min-w-0 rounded-xl border border-slate-200 bg-slate-50/80 p-2.5 sm:p-3.5"
                     >
-                      <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+                      <div className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-700 sm:px-2.5 sm:py-1 sm:text-[10px]">
                         <ShieldCheck size={12} />
-                        Verified ebook source
+                        <span className="truncate">Verified ebook source</span>
                       </div>
 
-                      <dl className="mt-3 space-y-2">
+                      <dl className="mt-2 space-y-1.5 sm:mt-3 sm:space-y-2">
                         <div>
-                          <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                          <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:text-[11px]">
                             Book
                           </dt>
-                          <dd className="mt-0.5 break-words text-sm font-bold leading-5 text-slate-800">
+                          <dd className="mt-0.5 break-words text-xs font-bold leading-5 text-slate-800 sm:text-sm">
                             {source?.book || "Book not specified"}
                           </dd>
                         </div>
                         <div>
-                          <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                          <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:text-[11px]">
                             Subject
                           </dt>
-                          <dd className="mt-0.5 break-words text-sm font-medium text-slate-700">
+                          <dd className="mt-0.5 break-words text-xs font-medium text-slate-700 sm:text-sm">
                             {source?.subject || "Subject not specified"}
                           </dd>
                         </div>
                       </dl>
 
-                      <div className="mt-3 grid gap-1.5 border-t border-slate-200 pt-3 text-xs text-slate-500">
+                      <div className="mt-2 grid gap-1 border-t border-slate-200 pt-2 text-[11px] text-slate-500 sm:mt-3 sm:gap-1.5 sm:pt-3 sm:text-xs">
                         <p>Confidence: Coming soon</p>
                         <p>Excerpt: Coming soon</p>
                         <p>Page: Coming soon</p>
