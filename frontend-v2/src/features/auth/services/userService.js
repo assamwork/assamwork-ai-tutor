@@ -33,13 +33,20 @@ export async function createUserIfNeeded(user) {
       createdAt: serverTimestamp(),
       lastLogin: serverTimestamp(),
     });
-
-    return;
+  } else {
+    await updateDoc(userRef, {
+      lastLogin: serverTimestamp(),
+      name: user.displayName || "",
+      photoURL: user.photoURL || "",
+    });
   }
 
-  await updateDoc(userRef, {
-    lastLogin: serverTimestamp(),
-    name: user.displayName || "",
-    photoURL: user.photoURL || "",
-  });
+  const profileSnapshot = await getDoc(userRef);
+
+  return profileSnapshot.exists()
+    ? {
+        id: profileSnapshot.id,
+        ...profileSnapshot.data(),
+      }
+    : null;
 }

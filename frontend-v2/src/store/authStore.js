@@ -9,13 +9,21 @@ import { createUserIfNeeded } from "../features/auth/services/userService";
 
 const useAuthStore = create((set) => ({
   user: null,
+  profile: null,
   loading: true,
+  profileLoading: true,
 
   initialize() {
     return observeAuth(async (user) => {
+      set({
+        profileLoading: true,
+      });
+
+      let profile = null;
+
       if (user) {
         try {
-          await createUserIfNeeded(user);
+          profile = await createUserIfNeeded(user);
         } catch (err) {
           console.error("Firestore Error:", err);
         }
@@ -23,7 +31,9 @@ const useAuthStore = create((set) => ({
 
       set({
         user,
+        profile,
         loading: false,
+        profileLoading: false,
       });
     });
   },
@@ -33,6 +43,7 @@ const useAuthStore = create((set) => ({
 
     set({
       user: null,
+      profile: null,
     });
   },
 }));
