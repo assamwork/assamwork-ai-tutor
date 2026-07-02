@@ -1,5 +1,6 @@
 import os
 import threading
+import logging
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
@@ -32,6 +33,7 @@ from library import (
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
 app = FastAPI()
 library_job_lock = threading.Lock()
 indexing_state_lock = threading.Lock()
@@ -256,6 +258,12 @@ def _run_reindex():
 
         return result
     except Exception as error:
+        logger.error(
+            "Library re-index failed. Verify PDFs in knowledge/, "
+            "Chroma database path, and embedding model availability. "
+            "Error: %s",
+            error,
+        )
         finished_at = datetime.now(timezone.utc).isoformat()
 
         with indexing_state_lock:
@@ -341,6 +349,10 @@ async def system_status():
         "backend": "online",
         "rag": "ready" if rag_ready else "not_ready",
         "chroma": library_status["chroma"],
+        "collectionExists": library_status["collectionExists"],
+        "collectionName": library_status["collectionName"],
+        "databasePath": library_status["databasePath"],
+        "ready": library_status["ready"],
         "libraryBooks": library_status["libraryBooks"],
         "libraryChunks": library_status["libraryChunks"],
         "lastIndexed": last_indexed,

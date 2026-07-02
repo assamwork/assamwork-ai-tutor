@@ -1,12 +1,14 @@
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
+import logging
 import re
 import unicodedata
 
 import chromadb
 
 
+logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parent
 KNOWLEDGE_ROOT = PROJECT_ROOT / "knowledge"
 DATABASE_PATH = PROJECT_ROOT / "db"
@@ -177,22 +179,29 @@ def _uploaded_at(path: Path | None):
 
 def get_library():
     chunk_counts = Counter()
-    index_available = False
+    collection_exists = False
 
     try:
         client = chromadb.PersistentClient(path=str(DATABASE_PATH))
         collection = client.get_collection(name=COLLECTION_NAME)
         result = collection.get(include=["metadatas"])
-        index_available = True
+        collection_exists = True
 
         for metadata in result.get("metadatas") or []:
             metadata = metadata or {}
             subject = metadata.get("subject") or "Unknown subject"
             book = metadata.get("book") or "Unknown book"
             chunk_counts[(subject, book)] += 1
-    except Exception:
+    except Exception as error:
         # The knowledge folder can still provide a useful read-only library
         # response when Chroma is unavailable or has not been created yet.
+        logger.warning(
+            "Chroma collection '%s' is unavailable at '%s'. "
+            "Library list will be shown from PDFs only. Error: %s",
+            COLLECTION_NAME,
+            DATABASE_PATH,
+            error,
+        )
         chunk_counts = Counter()
 
     books = {}
@@ -214,8 +223,8 @@ def get_library():
                     if chunk_counts.get(key, 0) > 0
                     else (
                         "Not indexed"
-                        if index_available
-                        else "Unknown"
+                        if collection_exists
+                        else "Not indexed"
                     )
                 ),
             }
@@ -231,19 +240,33 @@ def get_library():
 
 def get_library_status():
     books = get_library()
-    chroma_status = "unknown"
-    chunks = None
+    chroma_status = "collection_missing"
+    chunks = 0
+    collection_exists = False
+    ready = False
 
     try:
         client = chromadb.PersistentClient(path=str(DATABASE_PATH))
         collection = client.get_collection(name=COLLECTION_NAME)
         chunks = collection.count()
-        chroma_status = "ready"
-    except Exception:
-        pass
+        collection_exists = True
+        ready = chunks > 0
+        chroma_status = "ready" if ready else "not_indexed"
+    except Exception as error:
+        logger.warning(
+            "Chroma collection '%s' is missing or unavailable at '%s'. "
+            "Run admin re-index to recreate it. Error: %s",
+            COLLECTION_NAME,
+            DATABASE_PATH,
+            error,
+        )
 
     return {
         "libraryBooks": len(books),
         "libraryChunks": chunks,
         "chroma": chroma_status,
+        "collectionName": COLLECTION_NAME,
+        "collectionExists": collection_exists,
+        "databasePath": str(DATABASE_PATH),
+        "ready": ready,
     }

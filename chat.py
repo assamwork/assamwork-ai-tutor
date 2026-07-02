@@ -1,16 +1,29 @@
 import os
 import threading
+import logging
 
 import chromadb
 from dotenv import load_dotenv
 from google import genai
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 
+from library import COLLECTION_NAME, DATABASE_PATH
+
 load_dotenv()
 
+logger = logging.getLogger(__name__)
 _rag_lock = threading.Lock()
 _client = None
 _collection = None
+
+KNOWLEDGE_BASE_NOT_INDEXED_ANSWER = (
+    "Knowledge base not indexed yet. Please ask an admin to re-index "
+    "the AssamWork ebook library, then try again."
+)
+
+
+class KnowledgeBaseNotIndexedError(RuntimeError):
+    pass
 
 
 def get_client():
@@ -33,23 +46,56 @@ def get_collection():
                 embedding_function = SentenceTransformerEmbeddingFunction(
                     model_name="all-MiniLM-L6-v2"
                 )
-                db = chromadb.PersistentClient(path="db")
-                _collection = db.get_collection(
-                    name="assamwork",
-                    embedding_function=embedding_function
-                )
+                db = chromadb.PersistentClient(path=str(DATABASE_PATH))
+
+                try:
+                    _collection = db.get_collection(
+                        name=COLLECTION_NAME,
+                        embedding_function=embedding_function,
+                    )
+                except Exception as error:
+                    logger.warning(
+                        "Chroma collection '%s' is missing or unavailable "
+                        "at '%s'. Run admin re-index to recreate it. Error: %s",
+                        COLLECTION_NAME,
+                        DATABASE_PATH,
+                        error,
+                    )
+                    raise KnowledgeBaseNotIndexedError(
+                        "Knowledge base collection is missing."
+                    ) from error
 
     return _collection
 
 
 def ask_question(question: str):
+    global _collection
 
-    collection = get_collection()
+    try:
+        collection = get_collection()
 
-    results = collection.query(
-        query_texts=[question],
-        n_results=5,
-    )
+        results = collection.query(
+            query_texts=[question],
+            n_results=5,
+        )
+    except KnowledgeBaseNotIndexedError:
+        return {
+            "answer": KNOWLEDGE_BASE_NOT_INDEXED_ANSWER,
+            "sources": [],
+        }
+    except Exception as error:
+        _collection = None
+        logger.warning(
+            "Unable to query Chroma collection '%s' at '%s'. "
+            "Run admin re-index if this persists. Error: %s",
+            COLLECTION_NAME,
+            DATABASE_PATH,
+            error,
+        )
+        return {
+            "answer": KNOWLEDGE_BASE_NOT_INDEXED_ANSWER,
+            "sources": [],
+        }
 
     documents = results["documents"][0]
     metadatas = results["metadatas"][0]

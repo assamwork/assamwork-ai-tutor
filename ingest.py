@@ -1,4 +1,5 @@
 from pathlib import Path
+import logging
 
 import chromadb
 from chromadb.utils.embedding_functions import (
@@ -14,6 +15,7 @@ DATABASE_PATH = PROJECT_ROOT / "db"
 COLLECTION_NAME = "assamwork"
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 UPSERT_BATCH_SIZE = 100
+logger = logging.getLogger(__name__)
 
 
 def _pdf_files():
@@ -51,6 +53,12 @@ def _chunk_id(subject: str, book: str, index: int):
 
 
 def ingest_library():
+    logger.info(
+        "Starting AssamWork library ingestion. Database path: %s, "
+        "collection: %s",
+        DATABASE_PATH,
+        COLLECTION_NAME,
+    )
     embedding_function = SentenceTransformerEmbeddingFunction(
         model_name=EMBEDDING_MODEL
     )
@@ -117,6 +125,14 @@ def ingest_library():
             books_processed += 1
             chunks_added += len(chunks)
         except Exception as error:
+            logger.error(
+                "Failed to index ebook '%s' under subject '%s'. "
+                "Verify the PDF is readable and contains extractable text. "
+                "Error: %s",
+                book,
+                subject,
+                error,
+            )
             errors.append(
                 {
                     "subject": subject,
