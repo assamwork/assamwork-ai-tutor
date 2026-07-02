@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ShoppingBag, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -46,6 +46,48 @@ export default function StudyPage() {
     "AssamWork learner";
 
   const greeting = getTimeAwareGreeting();
+
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const root = document.getElementById("root");
+    const previous = {
+      htmlOverflow: html.style.overflow,
+      htmlHeight: html.style.height,
+      htmlOverscroll: html.style.overscrollBehavior,
+      bodyOverflow: body.style.overflow,
+      bodyHeight: body.style.height,
+      bodyOverscroll: body.style.overscrollBehavior,
+      rootOverflow: root?.style.overflow,
+      rootHeight: root?.style.height,
+    };
+
+    html.style.overflow = "hidden";
+    html.style.height = "100dvh";
+    html.style.overscrollBehavior = "none";
+    body.style.overflow = "hidden";
+    body.style.height = "100dvh";
+    body.style.overscrollBehavior = "none";
+
+    if (root) {
+      root.style.overflow = "hidden";
+      root.style.height = "100dvh";
+    }
+
+    return () => {
+      html.style.overflow = previous.htmlOverflow;
+      html.style.height = previous.htmlHeight;
+      html.style.overscrollBehavior = previous.htmlOverscroll;
+      body.style.overflow = previous.bodyOverflow;
+      body.style.height = previous.bodyHeight;
+      body.style.overscrollBehavior = previous.bodyOverscroll;
+
+      if (root) {
+        root.style.overflow = previous.rootOverflow ?? "";
+        root.style.height = previous.rootHeight ?? "";
+      }
+    };
+  }, []);
 
   async function sendFromHome() {
     if (!prompt.trim() || isLoading || sendingRef.current) return;
@@ -111,11 +153,11 @@ export default function StudyPage() {
   }
 
   return (
-    <div className="home-shell flex h-full max-w-full flex-col overflow-hidden bg-[radial-gradient(circle_at_top,#eef5ff_0%,#f8fafc_44%,#ffffff_100%)]">
-      <main className="min-h-0 flex-1 overflow-hidden px-4 pb-4 pt-16 sm:px-6 sm:pb-6 sm:pt-20 lg:px-8 lg:pt-10">
+    <div className="home-shell fixed inset-0 z-0 flex h-[100dvh] w-screen max-w-full flex-col overflow-hidden bg-[radial-gradient(circle_at_top,#eef5ff_0%,#f8fafc_44%,#ffffff_100%)] lg:static lg:h-full lg:w-full">
+      <main className="min-h-0 flex-1 overflow-hidden px-4 pb-24 pt-14 sm:px-6 sm:pb-28 sm:pt-20 lg:px-8 lg:pt-10">
         <div className="mx-auto flex min-h-full max-w-4xl flex-col items-center justify-center text-center">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-xl shadow-blue-200/70 sm:h-14 sm:w-14 sm:rounded-3xl">
-            <Sparkles size={22} />
+          <div className="home-logo flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-xl shadow-blue-200/70 sm:h-14 sm:w-14 sm:rounded-3xl">
+            <Sparkles size={20} />
           </div>
 
           <p className="mt-3 text-[11px] font-bold uppercase tracking-[0.24em] text-blue-600 sm:mt-4 sm:text-xs">
@@ -131,7 +173,7 @@ export default function StudyPage() {
             Ready to study today?
           </p>
 
-          <div className="mt-6 grid w-full max-w-2xl grid-cols-2 gap-2 sm:mt-8 sm:grid-cols-4 sm:gap-3">
+          <div className="home-quick-actions mt-5 grid w-full max-w-2xl grid-cols-2 gap-2 sm:mt-8 sm:grid-cols-4 sm:gap-3">
             {[
               "📘 Explain a topic",
               "📝 Generate MCQs",
@@ -142,7 +184,7 @@ export default function StudyPage() {
                 key={item}
                 type="button"
                 onClick={() => setPrompt(item)}
-                className="home-chip min-h-11 rounded-2xl border border-slate-200 bg-white/80 px-2.5 py-2.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 sm:min-h-12 sm:px-3 sm:py-3 sm:text-sm"
+                className="home-chip min-h-10 rounded-2xl border border-slate-200 bg-white/80 px-2.5 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 sm:min-h-12 sm:px-3 sm:py-3 sm:text-sm"
               >
                 {item}
               </button>
@@ -153,7 +195,7 @@ export default function StudyPage() {
             href="https://www.assamwork.com/"
             target="_blank"
             rel="noopener noreferrer"
-            className="home-material-card mt-4 grid w-full max-w-2xl grid-cols-[2.25rem_minmax(0,1fr)] gap-3 rounded-2xl border border-blue-100 bg-white/80 px-3 py-2.5 text-left shadow-sm transition hover:border-blue-200 hover:bg-blue-50/70 sm:mt-5 sm:flex sm:items-center sm:px-4 sm:py-3"
+            className="home-material-card mt-3 grid w-full max-w-2xl grid-cols-[2.25rem_minmax(0,1fr)] gap-3 rounded-2xl border border-blue-100 bg-white/80 px-3 py-2 text-left shadow-sm transition hover:border-blue-200 hover:bg-blue-50/70 sm:mt-5 sm:flex sm:items-center sm:px-4 sm:py-3"
           >
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white sm:h-10 sm:w-10">
               <ShoppingBag size={17} />
@@ -166,14 +208,14 @@ export default function StudyPage() {
                 Exam-ready PDFs, PYQs, mock tests and revision notes.
               </p>
             </div>
-            <span className="col-span-2 inline-flex min-h-8 w-full shrink-0 items-center justify-center rounded-full bg-blue-600 px-3 py-1.5 text-xs font-bold text-white sm:min-h-9 sm:w-auto">
+            <span className="home-material-cta col-span-2 inline-flex min-h-8 w-full shrink-0 items-center justify-center rounded-full bg-blue-600 px-3 py-1.5 text-xs font-bold text-white sm:min-h-9 sm:w-auto">
               Explore materials →
             </span>
           </a>
         </div>
       </main>
 
-      <section className="home-composer shrink-0 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6 sm:pb-5">
+      <section className="home-composer fixed inset-x-0 bottom-0 z-20 shrink-0 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6 sm:pb-5 lg:absolute">
         <div className="mx-auto max-w-2xl">
           <ChatInputBar
             value={prompt}
