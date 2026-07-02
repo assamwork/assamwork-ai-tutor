@@ -38,7 +38,7 @@ export default function Composer({
     if (!textarea) return;
 
     textarea.style.height = "auto";
-    textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
   }, [prompt]);
 
   useEffect(() => {
@@ -137,18 +137,18 @@ export default function Composer({
   }
 
   return (
-    <div className="relative z-20 shrink-0 border-t border-slate-200 bg-white/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_30px_rgba(15,23,42,0.06)] backdrop-blur sm:px-6 sm:py-4 sm:shadow-none">
+    <div className="relative z-20 shrink-0 border-t border-slate-200 bg-white/95 px-2.5 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-10px_24px_rgba(15,23,42,0.07)] backdrop-blur sm:px-6 sm:py-4 sm:shadow-none">
       <div className="mx-auto max-w-5xl">
-        <div className="flex min-w-0 items-end gap-2 rounded-2xl border border-slate-300 bg-white p-2 shadow-lg shadow-slate-200/70 transition focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100 sm:gap-3 sm:rounded-3xl sm:p-3">
+        <div className="flex min-w-0 items-end gap-1.5 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-lg shadow-slate-200/70 transition focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100 sm:gap-3 sm:rounded-3xl sm:p-3">
 
           <button
             type="button"
             onClick={() => showComposerNotice("Image upload coming soon.")}
             aria-label="Image upload coming soon"
             aria-describedby="composer-notice"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 sm:rounded-2xl"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 sm:h-11 sm:w-11 sm:rounded-2xl"
           >
-            <Paperclip size={19} />
+            <Paperclip size={18} />
           </button>
 
           <textarea
@@ -161,7 +161,7 @@ export default function Composer({
             aria-label="Ask from your uploaded ebooks"
             aria-describedby="chat-input-helper"
             placeholder="Ask from your uploaded ebooks..."
-            className="max-h-36 min-h-11 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1.5 py-2.5 text-sm leading-6 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed sm:max-h-40 sm:px-3 sm:text-base"
+            className="max-h-[7.5rem] min-h-10 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1.5 py-2 text-[15px] leading-6 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed sm:min-h-11 sm:max-h-40 sm:px-3 sm:py-2.5 sm:text-base"
           />
 
           <button
@@ -169,9 +169,9 @@ export default function Composer({
             onClick={() => showComposerNotice("Voice input coming soon.")}
             aria-label="Voice input coming soon"
             aria-describedby="composer-notice"
-            className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 min-[390px]:flex sm:rounded-2xl"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 sm:h-11 sm:w-11 sm:rounded-2xl"
           >
-            <Mic size={19} />
+            <Mic size={18} />
           </button>
 
           <button
@@ -179,9 +179,9 @@ export default function Composer({
             onClick={sendMessage}
             disabled={isLoading || !prompt.trim()}
             aria-label={isLoading ? "Waiting for answer" : "Send message"}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:rounded-2xl"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:h-11 sm:w-11 sm:rounded-2xl"
           >
-            <SendHorizontal size={20} />
+            <SendHorizontal size={19} />
           </button>
 
         </div>
@@ -190,7 +190,7 @@ export default function Composer({
           <p
             id="composer-notice"
             role="status"
-            className="mt-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-center text-xs font-medium text-blue-700"
+            className="absolute bottom-full left-3 right-3 mb-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-center text-xs font-medium text-blue-700 shadow-sm"
           >
             {composerNotice}
           </p>
@@ -198,7 +198,7 @@ export default function Composer({
 
         <p
           id="chat-input-helper"
-          className="mt-2 flex items-center justify-center gap-1.5 text-center text-[11px] text-slate-500 sm:text-xs"
+          className="mt-2 hidden items-center justify-center gap-1.5 text-center text-[11px] text-slate-500 sm:flex sm:text-xs"
         >
           <BookOpenCheck size={13} className="text-emerald-600" />
           Answers use uploaded ebooks only. Verify important information.
