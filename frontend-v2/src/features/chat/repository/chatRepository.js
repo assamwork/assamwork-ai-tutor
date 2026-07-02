@@ -4,25 +4,34 @@ import {
   doc,
   getDocs,
   getDoc,
+  setDoc,
   updateDoc,
-  deleteDoc,
   query,
   orderBy,
   serverTimestamp,
+  writeBatch,
+  increment,
 } from "firebase/firestore";
 
 import { db } from "../../../lib/firebase";
 
 class ChatRepository {
-  async createChat(uid, title = "New Chat") {
+  async createChat(uid, title = "New AI Tutor Chat") {
     const ref = await addDoc(
       collection(db, "users", uid, "chats"),
       {
         title,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
+        messageCount: 0,
       }
     );
+
+    try {
+      await this.syncTotalChats(uid);
+    } catch (error) {
+      console.error("Unable to update totalChats:", error);
+    }
 
     return ref.id;
   }
@@ -65,9 +74,35 @@ class ChatRepository {
   }
 
   async deleteChat(uid, chatId) {
-    await deleteDoc(
-      doc(db, "users", uid, "chats", chatId)
+    const messagesRef = collection(
+      db,
+      "users",
+      uid,
+      "chats",
+      chatId,
+      "messages"
     );
+    const messagesSnapshot = await getDocs(messagesRef);
+    const documents = [
+      ...messagesSnapshot.docs.map((message) => message.ref),
+      doc(db, "users", uid, "chats", chatId),
+    ];
+
+    for (let index = 0; index < documents.length; index += 500) {
+      const batch = writeBatch(db);
+
+      documents
+        .slice(index, index + 500)
+        .forEach((documentRef) => batch.delete(documentRef));
+
+      await batch.commit();
+    }
+
+    try {
+      await this.syncTotalChats(uid);
+    } catch (error) {
+      console.error("Unable to update totalChats:", error);
+    }
   }
 
   async getMessages(uid, chatId) {
@@ -91,8 +126,15 @@ class ChatRepository {
     }));
   }
 
-  async addMessage(uid, chatId, role, content) {
-    await addDoc(
+  async addMessage(
+    uid,
+    chatId,
+    role,
+    content,
+    sources = [],
+    title = null
+  ) {
+    const messageRef = doc(
       collection(
         db,
         "users",
@@ -100,18 +142,45 @@ class ChatRepository {
         "chats",
         chatId,
         "messages"
-      ),
-      {
-        role,
-        content,
-        createdAt: serverTimestamp(),
-      }
+      )
+    );
+    const chatRef = doc(db, "users", uid, "chats", chatId);
+    const batch = writeBatch(db);
+
+    batch.set(messageRef, {
+      role,
+      content,
+      sources,
+      createdAt: serverTimestamp(),
+    });
+
+    const chatUpdate = {
+      updatedAt: serverTimestamp(),
+      messageCount: increment(1),
+    };
+
+    if (title?.trim()) {
+      chatUpdate.title = title.trim();
+    }
+
+    batch.update(chatRef, chatUpdate);
+    await batch.commit();
+
+    return messageRef.id;
+  }
+
+  async syncTotalChats(uid) {
+    const snapshot = await getDocs(
+      collection(db, "users", uid, "chats")
     );
 
-    await updateDoc(
-      doc(db, "users", uid, "chats", chatId),
+    await setDoc(
+      doc(db, "users", uid),
       {
-        updatedAt: serverTimestamp(),
+        totalChats: snapshot.size,
+      },
+      {
+        merge: true,
       }
     );
   }

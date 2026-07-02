@@ -5,12 +5,19 @@ import useChatStore from "../../../store/chatStore";
 
 export default function ChatInitializer({ children }) {
   const user = useAuthStore((state) => state.user);
+  const initializeChats = useChatStore(
+    (state) => state.initializeChats
+  );
+  const resetChats = useChatStore((state) => state.resetChats);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      resetChats();
+      return;
+    }
 
-    // Cloud initialization will be added later.
-  }, [user]);
+    void initializeChats(user.uid);
+  }, [user, initializeChats, resetChats]);
 
   return children;
 }

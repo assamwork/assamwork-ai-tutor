@@ -13,6 +13,8 @@ export default function Composer({
   const {
     addUserMessage,
     addAssistantMessage,
+    createChat,
+    activeChatId,
     isLoading,
     setLoading,
   } = useChatStore();
@@ -31,14 +33,24 @@ export default function Composer({
 
     const question = prompt.trim();
     sendingRef.current = true;
-
-    addUserMessage(question);
-
-    setPrompt("");
-
-    setLoading(true);
+    let targetChatId = activeChatId;
 
     try {
+      targetChatId = targetChatId || (await createChat());
+
+      if (!targetChatId) return;
+
+      setLoading(true, targetChatId);
+
+      const savedUserMessageId = await addUserMessage(
+        question,
+        targetChatId
+      );
+
+      if (!savedUserMessageId) return;
+
+      setPrompt("");
+
       const response = await fetch(
         "http://127.0.0.1:8000/ask",
         {
@@ -58,20 +70,28 @@ export default function Composer({
 
       const data = await response.json();
 
-      addAssistantMessage({
-        content:
-          data.answer ??
-          "No answer returned.",
-        sources: data.sources ?? [],
-      });
+      await addAssistantMessage(
+        {
+          content:
+            data.answer ??
+            "No answer returned.",
+          sources: data.sources ?? [],
+        },
+        targetChatId
+      );
     } catch (err) {
       console.error(err);
 
-      addAssistantMessage({
-        content:
-          "Unable to connect to AssamWork AI backend.",
-        sources: [],
-      });
+      if (targetChatId) {
+        await addAssistantMessage(
+          {
+            content:
+              "Unable to connect to AssamWork AI backend.",
+            sources: [],
+          },
+          targetChatId
+        );
+      }
     } finally {
       sendingRef.current = false;
       setLoading(false);

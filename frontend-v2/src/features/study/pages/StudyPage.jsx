@@ -3,12 +3,15 @@ import {
   BookOpenCheck,
   CalendarDays,
   Clock3,
+  Download,
+  ExternalLink,
   FileQuestion,
   Flame,
   Layers3,
   MessageSquareText,
   Newspaper,
   ShieldCheck,
+  ShoppingBag,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -107,6 +110,44 @@ export default function StudyPage() {
             </div>
           </div>
         </section>
+
+        <a
+          href="https://www.assamwork.com/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="group mt-6 block overflow-hidden rounded-3xl border border-indigo-200 bg-gradient-to-br from-white via-blue-50 to-indigo-100 p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-xl hover:shadow-indigo-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 sm:p-7"
+          aria-label="Visit AssamWork Store in a new tab"
+        >
+          <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-center">
+            <div className="flex min-w-0 items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-200 sm:h-14 sm:w-14">
+                <ShoppingBag size={25} />
+              </div>
+
+              <div className="min-w-0">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-600">
+                  AssamWork Digital Store
+                </p>
+                <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">
+                  Buy AssamWork Study Materials
+                </h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                  Get exam-ready digital bundles, revision notes, PYQs, mock
+                  tests, and high-yield PDFs for Assam competitive exams.
+                </p>
+                <p className="mt-3 flex items-center gap-2 text-xs font-semibold text-emerald-700">
+                  <Download size={15} />
+                  Instant access to digital study materials
+                </p>
+              </div>
+            </div>
+
+            <span className="inline-flex shrink-0 items-center justify-center gap-2 self-start rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition group-hover:bg-indigo-700 sm:self-center">
+              Visit AssamWork Store
+              <ExternalLink size={16} />
+            </span>
+          </div>
+        </a>
 
         <div className="mt-6 grid gap-6 lg:grid-cols-3">
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 lg:col-span-2">

@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from "react";
 import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import ProtectedRoute from "./ProtectedRoute";
+import AdminRoute from "./AdminRoute";
 import MainLayout from "@/components/layout/MainLayout";
 
 const AuthPage = lazy(() => import("@/features/auth/pages/AuthPage"));
@@ -9,6 +10,7 @@ const ChatPage = lazy(() => import("@/features/chat/pages/ChatPage"));
 const ProfilePage = lazy(() => import("@/features/profile/pages/ProfilePage"));
 const SettingsPage = lazy(() => import("@/features/settings/pages/SettingsPage"));
 const StudyPage = lazy(() => import("@/features/study/pages/StudyPage"));
+const LibraryPage = lazy(() => import("@/features/admin/pages/LibraryPage"));
 
 function Loader() {
   return (
@@ -57,6 +59,14 @@ export const router = createBrowserRouter([
       {
         path: "/settings",
         element: Load(SettingsPage),
+      },
+      {
+        path: "/admin/library",
+        element: (
+          <AdminRoute>
+            {Load(LibraryPage)}
+          </AdminRoute>
+        ),
       },
     ],
   },

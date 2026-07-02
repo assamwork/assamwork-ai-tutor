@@ -22,8 +22,8 @@ export default function useChatActions() {
       if (!activeChat) return;
 
       return addUserMessage(
-        activeChat.id,
-        content
+        content,
+        activeChat.id
       );
     },
 
@@ -31,8 +31,8 @@ export default function useChatActions() {
       if (!activeChat) return;
 
       return addAssistantMessage(
-        activeChat.id,
-        content
+        content,
+        activeChat.id
       );
     },
   };

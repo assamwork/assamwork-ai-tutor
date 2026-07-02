@@ -9,6 +9,7 @@ import {
   Pencil,
   Trash2,
   X,
+  LibraryBig,
 } from "lucide-react";
 
 import { useState } from "react";
@@ -16,6 +17,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import useChatStore from "../../store/chatStore";
 import useAuthStore from "../../store/authStore";
+import { isAdmin } from "../../features/admin/services/adminAccess";
 
 export default function Sidebar({ isOpen, onClose }) {
   const navigate = useNavigate();
@@ -31,9 +33,14 @@ export default function Sidebar({ isOpen, onClose }) {
     setActiveChat,
     renameChat,
     deleteChat,
+    chatsLoading,
+    error,
+    clearError,
+    retryChats,
   } = useChatStore();
 
   const { user, logout } = useAuthStore();
+  const hasAdminAccess = isAdmin(user);
 
   const menu = [
     { icon: MessageSquare, label: "Chat", path: "/chat" },
@@ -51,9 +58,12 @@ export default function Sidebar({ isOpen, onClose }) {
     onClose();
   }
 
-  function handleCreateChat() {
-    createChat();
-    goTo("/chat");
+  async function handleCreateChat() {
+    const chatId = await createChat();
+
+    if (chatId) {
+      goTo("/chat");
+    }
   }
 
   function handleOpenChat(chatId) {
@@ -66,9 +76,9 @@ export default function Sidebar({ isOpen, onClose }) {
     setEditingTitle(chat.title);
   }
 
-  function finishRenaming() {
+  async function finishRenaming() {
     if (editingChatId && editingTitle.trim()) {
-      renameChat(editingChatId, editingTitle);
+      await renameChat(editingChatId, editingTitle);
     }
 
     setEditingChatId(null);
@@ -87,8 +97,8 @@ export default function Sidebar({ isOpen, onClose }) {
     }
   }
 
-  function handleDeleteChat(chatId) {
-    deleteChat(chatId);
+  async function handleDeleteChat(chatId) {
+    await deleteChat(chatId);
 
     if (editingChatId === chatId) {
       setEditingChatId(null);
@@ -188,7 +198,18 @@ export default function Sidebar({ isOpen, onClose }) {
 
         <div className="space-y-2">
 
-          {filteredChats.map((chat) => (
+          {chatsLoading && (
+            <div className="space-y-2 py-1" aria-label="Loading chats">
+              {[0, 1, 2].map((item) => (
+                <div
+                  key={item}
+                  className="h-11 animate-pulse rounded-xl bg-slate-100"
+                />
+              ))}
+            </div>
+          )}
+
+          {!chatsLoading && filteredChats.map((chat) => (
             <div
               key={chat.id}
               className={`group flex items-center gap-1 rounded-xl px-2 py-1 transition ${
@@ -242,13 +263,35 @@ export default function Sidebar({ isOpen, onClose }) {
             </div>
           ))}
 
-          {filteredChats.length === 0 && (
+          {!chatsLoading && filteredChats.length === 0 && (
             <p className="px-2 py-3 text-sm text-slate-500">
-              No chats found.
+              {searchQuery.trim()
+                ? "No chats found."
+                : "No cloud chats yet."}
             </p>
           )}
 
         </div>
+
+        {error && (
+          <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+            <p>{error}</p>
+            <button
+              type="button"
+              onClick={() => void retryChats()}
+              className="mt-2 font-bold text-red-800 hover:underline"
+            >
+              Try again
+            </button>
+            <button
+              type="button"
+              onClick={clearError}
+              className="ml-3 mt-2 font-bold text-red-800 hover:underline"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
         <h3 className="mt-8 mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
           Navigation
@@ -273,6 +316,27 @@ export default function Sidebar({ isOpen, onClose }) {
           ))}
 
         </div>
+
+        {hasAdminAccess && (
+          <>
+            <h3 className="mb-3 mt-8 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Admin
+            </h3>
+
+            <button
+              type="button"
+              onClick={() => goTo("/admin/library")}
+              className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 transition ${
+                location.pathname === "/admin/library"
+                  ? "bg-blue-50 text-blue-700"
+                  : "text-slate-700 hover:bg-slate-100"
+              }`}
+            >
+              <LibraryBig size={20} />
+              <span>Ebook Library</span>
+            </button>
+          </>
+        )}
 
       </div>
 
