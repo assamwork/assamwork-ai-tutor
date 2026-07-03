@@ -95,6 +95,11 @@ class KnowledgeBaseNotIndexedError(RuntimeError):
     pass
 
 
+def _trace(trace_id: str | None, message: str, *args):
+    trace_label = trace_id or "-"
+    logger.info("[trace:%s] " + message, trace_label, *args)
+
+
 def _metadata_page(metadata: dict):
     for key in (
         "page",
@@ -356,16 +361,28 @@ Return JSON only with this structure:
 """
 
 
-def rewrite_question(question: str, history=None):
+def rewrite_question(question: str, history=None, trace_id: str | None = None):
     normalized_history = _normalize_history(history)
+    _trace(
+        trace_id,
+        "rewrite start question=%r history_len=%s",
+        question,
+        len(normalized_history),
+    )
 
     if not normalized_history:
         if _needs_conversation_context(question):
+            _trace(
+                trace_id,
+                "rewrite return clarification_needed query=%r",
+                question,
+            )
             return {
                 "query": question,
                 "clarification": CLARIFICATION_MESSAGE,
             }
 
+        _trace(trace_id, "rewrite return original query=%r", question)
         return {
             "query": question,
             "clarification": "",
@@ -380,17 +397,29 @@ def rewrite_question(question: str, history=None):
         rewrite = _parse_query_rewrite(response.text, question)
     except Exception as error:
         logger.warning("Unable to rewrite follow-up question: %s", error)
+        _trace(trace_id, "rewrite return original after error query=%r", question)
         return {
             "query": question,
             "clarification": "",
         }
 
     if rewrite["clarification_needed"]:
+        _trace(
+            trace_id,
+            "rewrite return clarification query=%r clarification=%r",
+            rewrite["standalone_question"],
+            rewrite["clarification"] or CLARIFICATION_MESSAGE,
+        )
         return {
             "query": rewrite["standalone_question"],
             "clarification": rewrite["clarification"] or CLARIFICATION_MESSAGE,
         }
 
+    _trace(
+        trace_id,
+        "rewrite return standalone query=%r",
+        rewrite["standalone_question"],
+    )
     return {
         "query": rewrite["standalone_question"],
         "clarification": "",
@@ -557,8 +586,14 @@ def _evaluate_retrieval_confidence(question: str, documents, distances=None):
     }
 
 
-def _log_retrieval_confidence(question: str, confidence: dict, source_count: int):
-    logger.info(
+def _log_retrieval_confidence(
+    question: str,
+    confidence: dict,
+    source_count: int,
+    trace_id: str | None = None,
+):
+    _trace(
+        trace_id,
         (
             "Retrieval confidence details: mode=%s reason=%s "
             "documents=%s useful_chunks=%s term_coverage=%s "
@@ -579,8 +614,50 @@ def _log_retrieval_confidence(question: str, confidence: dict, source_count: int
     )
 
 
-def _retrieve_context(question: str):
+def _distance_score(distance):
+    if not isinstance(distance, (int, float)):
+        return None
+
+    return round(1 / (1 + max(distance, 0)), 4)
+
+
+def _log_retrieved_chunks(
+    question: str,
+    documents,
+    metadatas,
+    distances,
+    trace_id: str | None = None,
+):
+    _trace(
+        trace_id,
+        "retrieval returned chunks=%s query=%r",
+        len(documents or []),
+        question,
+    )
+
+    for index, document in enumerate(documents or []):
+        metadata = (metadatas or [{}])[index] if index < len(metadatas or []) else {}
+        distance = (distances or [None])[index] if index < len(distances or []) else None
+        preview = re.sub(r"\s+", " ", document or "").strip()[:180]
+        _trace(
+            trace_id,
+            (
+                "retrieval chunk index=%s raw_distance=%r similarity_score=%r "
+                "book=%r page=%r preview=%r"
+            ),
+            index,
+            distance,
+            _distance_score(distance),
+            metadata.get("book"),
+            _metadata_page(metadata or {}),
+            preview,
+        )
+
+
+def _retrieve_context(question: str, trace_id: str | None = None):
     global _collection
+
+    _trace(trace_id, "retrieval start query=%r", question)
 
     try:
         collection = get_collection()
@@ -597,7 +674,8 @@ def _retrieve_context(question: str):
             "document_count": 0,
             "useful_chunks": 0,
         }
-        _log_retrieval_confidence(question, confidence, 0)
+        _trace(trace_id, "retrieval return fallback reason=knowledge_base_not_indexed")
+        _log_retrieval_confidence(question, confidence, 0, trace_id)
 
         return {
             "context": "",
@@ -619,7 +697,8 @@ def _retrieve_context(question: str):
             "document_count": 0,
             "useful_chunks": 0,
         }
-        _log_retrieval_confidence(question, confidence, 0)
+        _trace(trace_id, "retrieval return fallback reason=knowledge_base_unavailable")
+        _log_retrieval_confidence(question, confidence, 0, trace_id)
 
         return {
             "context": "",
@@ -630,6 +709,13 @@ def _retrieve_context(question: str):
     documents = _flatten_query_result(results, "documents")
     metadatas = _flatten_query_result(results, "metadatas")
     distances = _flatten_query_result(results, "distances")
+    _log_retrieved_chunks(
+        question,
+        documents,
+        metadatas,
+        distances,
+        trace_id,
+    )
 
     if not documents:
         confidence = {
@@ -638,7 +724,8 @@ def _retrieve_context(question: str):
             "document_count": 0,
             "useful_chunks": 0,
         }
-        _log_retrieval_confidence(question, confidence, 0)
+        _trace(trace_id, "retrieval return fallback reason=no_documents")
+        _log_retrieval_confidence(question, confidence, 0, trace_id)
 
         return {
             "context": "",
@@ -652,15 +739,32 @@ def _retrieve_context(question: str):
         documents,
         distances,
     )
-    _log_retrieval_confidence(question, confidence, len(candidate_sources))
+    _log_retrieval_confidence(
+        question,
+        confidence,
+        len(candidate_sources),
+        trace_id,
+    )
 
     if confidence.get("mode") != "knowledge_base":
+        _trace(
+            trace_id,
+            "retrieval return fallback reason=%s candidate_sources=%s returned_sources=0",
+            confidence.get("reason", "unknown"),
+            len(candidate_sources),
+        )
         return {
             "context": "",
             "sources": [],
             "confidence": confidence,
         }
 
+    _trace(
+        trace_id,
+        "retrieval return knowledge_base context_chars=%s returned_sources=%s",
+        len("\n\n".join(documents)),
+        len(candidate_sources),
+    )
     return {
         "context": "\n\n".join(documents),
         "sources": candidate_sources,
@@ -784,6 +888,15 @@ def _fallback_answer_text(answer: str):
     return f"{GEMINI_FALLBACK_NOTICE}\n\n{clean_answer}"
 
 
+def _fallback_generation_error_text():
+    return (
+        f"{GEMINI_FALLBACK_NOTICE}\n\n"
+        "Gemini fallback mode was selected, but Gemini could not generate "
+        "an answer right now. Please try again after checking the Gemini "
+        "API credentials."
+    )
+
+
 def _structured_prompt(
     question: str,
     context: str,
@@ -887,12 +1000,21 @@ def generate_general_answer(question: str, retrieval_query: str):
     return _fallback_answer_text(response.text)
 
 
-def _route_question(question: str, history=None):
+def _route_question(question: str, history=None, trace_id: str | None = None):
+    _trace(
+        trace_id,
+        "route start question=%r history_len=%s",
+        question,
+        len(_normalize_history(history)),
+    )
+
     if _is_greeting(question):
-        logger.info(
+        _trace(
+            trace_id,
             "Mode: Greeting Bypass. Source count returned: 0. Query: %s",
             question,
         )
+        _trace(trace_id, "route return mode=greeting sources=0")
         return {
             "mode": "greeting",
             "answer": _greeting_answer(),
@@ -903,13 +1025,15 @@ def _route_question(question: str, history=None):
             "context": "",
         }
 
-    rewrite = rewrite_question(question, history)
+    rewrite = rewrite_question(question, history, trace_id)
 
     if rewrite["clarification"]:
-        logger.info(
+        _trace(
+            trace_id,
             "Mode: Clarification. Source count returned: 0. Query: %s",
             question,
         )
+        _trace(trace_id, "route return mode=clarification sources=0")
         return {
             "mode": "clarification",
             "answer": rewrite["clarification"],
@@ -921,7 +1045,8 @@ def _route_question(question: str, history=None):
         }
 
     retrieval_query = rewrite["query"]
-    rag = _retrieve_context(retrieval_query)
+    _trace(trace_id, "route retrieval_query=%r", retrieval_query)
+    rag = _retrieve_context(retrieval_query, trace_id)
     confidence = rag.get("confidence") or {}
     mode = (
         "knowledge_base"
@@ -936,12 +1061,20 @@ def _route_question(question: str, history=None):
         else "Gemini Fallback"
     )
 
-    logger.info(
+    _trace(
+        trace_id,
         "Mode: %s. Reason: %s. Source count returned: %s. Query: %s",
         log_mode,
         confidence.get("reason", "unknown"),
         source_count,
         retrieval_query,
+    )
+    _trace(
+        trace_id,
+        "route return mode=%s context_chars=%s sources=%s",
+        mode,
+        len(rag["context"] if mode == "knowledge_base" else ""),
+        source_count,
     )
 
     return {
@@ -959,10 +1092,17 @@ def stream_answer(
     question: str,
     history=None,
     stop_event: threading.Event | None = None,
+    trace_id: str | None = None,
 ):
-    route = _route_question(question, history)
+    _trace(trace_id, "stream_answer start streaming_path=true")
+    route = _route_question(question, history, trace_id)
 
     if route["mode"] in {"greeting", "clarification"}:
+        _trace(
+            trace_id,
+            "stream_answer return immediate mode=%s sources=0",
+            route["mode"],
+        )
         yield {
             "type": "chunk",
             "text": route["answer"],
@@ -979,6 +1119,7 @@ def stream_answer(
     confidence = route.get("confidence") or {}
 
     if route["mode"] == "gemini_fallback":
+        _trace(trace_id, "stream_answer branch=gemini_fallback sources=0")
         answer_parts = []
 
         try:
@@ -993,6 +1134,11 @@ def stream_answer(
 
             for chunk in stream:
                 if stop_event and stop_event.is_set():
+                    _trace(
+                        trace_id,
+                        "stream_answer return stopped mode=gemini_fallback answer_chars=%s sources=0",
+                        len(f"{GEMINI_FALLBACK_NOTICE}\n\n{''.join(answer_parts)}"),
+                    )
                     return
 
                 text = getattr(chunk, "text", "") or ""
@@ -1018,17 +1164,40 @@ def stream_answer(
                 "revision": "",
                 "confidence": confidence,
             }
+            _trace(
+                trace_id,
+                "stream_answer return metadata mode=gemini_fallback answer_chars=%s sources=0",
+                len(f"{GEMINI_FALLBACK_NOTICE}\n\n{''.join(answer_parts)}"),
+            )
         except Exception as error:
             logger.warning("Unable to stream Gemini fallback answer: %s", error)
+            error_text = _fallback_generation_error_text()
             yield {
-                "type": "error",
-                "message": "Unable to get an answer right now. Please try again.",
+                "type": "chunk",
+                "text": error_text.replace(f"{GEMINI_FALLBACK_NOTICE}\n\n", ""),
             }
+            yield {
+                "type": "metadata",
+                "sources": [],
+                "revision": "",
+                "confidence": confidence,
+            }
+            _trace(
+                trace_id,
+                "stream_answer return graceful_generation_error mode=gemini_fallback error=%r sources=0",
+                str(error),
+            )
 
         return
 
     context = route["context"]
     sources = route["sources"]
+    _trace(
+        trace_id,
+        "stream_answer branch=knowledge_base context_chars=%s sources=%s",
+        len(context),
+        len(sources),
+    )
     answer_parts = []
 
     try:
@@ -1039,6 +1208,12 @@ def stream_answer(
 
         for chunk in stream:
             if stop_event and stop_event.is_set():
+                _trace(
+                    trace_id,
+                    "stream_answer return stopped mode=knowledge_base answer_chars=%s sources=%s",
+                    len("".join(answer_parts)),
+                    len(sources),
+                )
                 return
 
             text = getattr(chunk, "text", "") or ""
@@ -1075,8 +1250,20 @@ def stream_answer(
             "revision": revision,
             "confidence": confidence,
         }
+        _trace(
+            trace_id,
+            "stream_answer return metadata mode=knowledge_base answer_chars=%s sources=%s revision_chars=%s",
+            len(answer),
+            len(sources),
+            len(revision or ""),
+        )
     except Exception as error:
         logger.warning("Unable to stream Gemini answer: %s", error)
+        _trace(
+            trace_id,
+            "stream_answer return error mode=knowledge_base error=%r",
+            str(error),
+        )
         yield {
             "type": "error",
             "message": "Unable to get an answer right now. Please try again.",
@@ -1125,25 +1312,55 @@ def get_collection():
     return _collection
 
 
-def ask_question(question: str, history=None):
-    route = _route_question(question, history)
+def ask_question(question: str, history=None, trace_id: str | None = None):
+    _trace(trace_id, "ask_question start streaming_path=false")
+    route = _route_question(question, history, trace_id)
 
     if route["mode"] in {"greeting", "clarification"}:
+        _trace(
+            trace_id,
+            "ask_question return immediate mode=%s sources=0",
+            route["mode"],
+        )
         return {
             "answer": route["answer"],
             "revision": "",
             "sources": [],
+            "confidence": route.get("confidence"),
         }
 
     retrieval_query = route["retrieval_query"]
 
     if route["mode"] == "gemini_fallback":
+        _trace(trace_id, "ask_question branch=gemini_fallback sources=0")
+        try:
+            answer = generate_general_answer(question, retrieval_query)
+        except Exception as error:
+            logger.warning("Unable to generate Gemini fallback answer: %s", error)
+            answer = _fallback_generation_error_text()
+            _trace(
+                trace_id,
+                "ask_question graceful_generation_error mode=gemini_fallback error=%r sources=0",
+                str(error),
+            )
+        _trace(
+            trace_id,
+            "ask_question return mode=gemini_fallback answer_chars=%s sources=0",
+            len(answer),
+        )
         return {
-            "answer": generate_general_answer(question, retrieval_query),
+            "answer": answer,
             "revision": "",
             "sources": [],
+            "confidence": route.get("confidence"),
         }
 
+    _trace(
+        trace_id,
+        "ask_question branch=knowledge_base context_chars=%s sources=%s",
+        len(route["context"]),
+        len(route["sources"]),
+    )
     response = get_client().models.generate_content(
         model="gemini-2.5-flash",
         contents=_structured_prompt(
@@ -1154,9 +1371,17 @@ def ask_question(question: str, history=None):
         config=_json_config(_answer_schema()),
     )
     structured_answer = _parse_structured_answer(response.text)
+    _trace(
+        trace_id,
+        "ask_question return mode=knowledge_base answer_chars=%s sources=%s revision_chars=%s",
+        len(structured_answer["answer"]),
+        len(route["sources"]),
+        len(structured_answer["revision"] or ""),
+    )
 
     return {
         "answer": structured_answer["answer"],
         "revision": structured_answer["revision"],
         "sources": route["sources"],
+        "confidence": route.get("confidence"),
     }

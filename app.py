@@ -3,6 +3,7 @@ import threading
 import logging
 import asyncio
 import json
+import uuid
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
@@ -37,7 +38,14 @@ from library import (
 
 load_dotenv()
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s:%(name)s:%(message)s",
+)
+logging.getLogger().setLevel(logging.INFO)
+
 logger = logging.getLogger(__name__)
+logging.getLogger("chat").setLevel(logging.INFO)
 app = FastAPI()
 library_job_lock = threading.Lock()
 indexing_state_lock = threading.Lock()
@@ -162,15 +170,33 @@ async def root():
 
 @app.post("/ask")
 async def ask(question: Question):
+    request_id = uuid.uuid4().hex[:10]
+    history = [message.model_dump() for message in question.history]
+    logger.info(
+        "[trace:%s] POST /ask incoming question=%r history_len=%s",
+        request_id,
+        question.question,
+        len(history),
+    )
     result = ask_question(
         question.question,
-        [message.model_dump() for message in question.history],
+        history,
+        trace_id=request_id,
+    )
+    logger.info(
+        "[trace:%s] POST /ask return answer_chars=%s revision_chars=%s sources=%s confidence_mode=%s",
+        request_id,
+        len(result.get("answer", "")),
+        len(result.get("revision", "") or ""),
+        len(result.get("sources", []) or []),
+        (result.get("confidence") or {}).get("mode"),
     )
 
     return {
         "answer": result["answer"],
         "revision": result.get("revision", ""),
         "sources": result["sources"],
+        "confidence": result.get("confidence"),
     }
 
 
@@ -183,6 +209,15 @@ def _sse_event(event: str, data):
 
 @app.post("/ask/stream")
 async def ask_stream(question: Question, request: Request):
+    request_id = uuid.uuid4().hex[:10]
+    history = [message.model_dump() for message in question.history]
+    logger.info(
+        "[trace:%s] POST /ask/stream incoming question=%r history_len=%s",
+        request_id,
+        question.question,
+        len(history),
+    )
+
     async def event_generator():
         queue = asyncio.Queue()
         stop_event = threading.Event()
@@ -199,15 +234,24 @@ async def ask_stream(question: Question, request: Request):
             try:
                 for item in stream_answer(
                     question.question,
-                    [message.model_dump() for message in question.history],
+                    history,
                     stop_event,
+                    trace_id=request_id,
                 ):
                     if stop_event.is_set():
+                        logger.info(
+                            "[trace:%s] POST /ask/stream producer stopped before enqueue",
+                            request_id,
+                        )
                         break
 
                     put_item(item)
             except Exception as error:
-                logger.warning("Streaming producer failed: %s", error)
+                logger.warning(
+                    "[trace:%s] Streaming producer failed: %s",
+                    request_id,
+                    error,
+                )
                 put_item(
                     {
                         "type": "error",
@@ -224,10 +268,18 @@ async def ask_stream(question: Question, request: Request):
         thread.start()
 
         try:
+            logger.info(
+                "[trace:%s] POST /ask/stream send event=thinking",
+                request_id,
+            )
             yield _sse_event("thinking", {"message": "Thinking..."})
 
             while True:
                 if await request.is_disconnected():
+                    logger.info(
+                        "[trace:%s] POST /ask/stream client disconnected",
+                        request_id,
+                    )
                     stop_event.set()
                     break
 
@@ -237,13 +289,29 @@ async def ask_stream(question: Question, request: Request):
                     continue
 
                 if item is None:
+                    logger.info(
+                        "[trace:%s] POST /ask/stream producer completed",
+                        request_id,
+                    )
                     break
 
                 item_type = item.get("type")
 
                 if item_type == "chunk":
+                    logger.info(
+                        "[trace:%s] POST /ask/stream send event=chunk chars=%s",
+                        request_id,
+                        len(item.get("text", "") or ""),
+                    )
                     yield _sse_event("chunk", {"text": item.get("text", "")})
                 elif item_type == "metadata":
+                    logger.info(
+                        "[trace:%s] POST /ask/stream send event=metadata sources=%s revision_chars=%s confidence_mode=%s",
+                        request_id,
+                        len(item.get("sources", []) or []),
+                        len(item.get("revision", "") or ""),
+                        (item.get("confidence") or {}).get("mode"),
+                    )
                     yield _sse_event(
                         "metadata",
                         {
@@ -253,6 +321,11 @@ async def ask_stream(question: Question, request: Request):
                         },
                     )
                 elif item_type == "error":
+                    logger.info(
+                        "[trace:%s] POST /ask/stream send event=error message=%r",
+                        request_id,
+                        item.get("message", "Unable to get an answer right now."),
+                    )
                     yield _sse_event(
                         "error",
                         {
@@ -264,6 +337,10 @@ async def ask_stream(question: Question, request: Request):
                     )
         finally:
             stop_event.set()
+            logger.info(
+                "[trace:%s] POST /ask/stream generator closing",
+                request_id,
+            )
 
     return StreamingResponse(
         event_generator(),
