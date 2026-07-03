@@ -3,6 +3,7 @@ import threading
 import logging
 import json
 import re
+import string
 
 import chromadb
 from dotenv import load_dotenv
@@ -246,8 +247,20 @@ EXAM_AUDIENCE = (
     "APSC, ADRE, Assam Police, Assam TET, Grade 3, Grade 4, "
     "Guwahati High Court, Class 10, and Class 12"
 )
+GENERIC_OPENING_PHRASES = (
+    "Here is",
+    "Here's",
+    "Let us understand",
+    "Let's understand",
+    "Essential for your competitive exam revision",
+    "Below is",
+)
 UNIVERSAL_EXAM_STRUCTURE = """
 Use this universal Knowledge Base answer structure:
+
+# Topic Heading
+- Start immediately with a Markdown H1 heading for the topic.
+- Do not write any generic introductory sentence before the heading.
 
 ## Introduction
 - Maximum 2-3 lines.
@@ -1175,6 +1188,26 @@ def _classify_question(question: str, retrieval_query: str | None = None):
     return "General"
 
 
+def _topic_heading(question: str, retrieval_query: str | None = None):
+    topic = (retrieval_query or question or "").strip()
+    topic = re.sub(r"\s+", " ", topic)
+    topic = re.sub(
+        r"^(?:who|what|where|when|why|how)\s+(?:is|was|are|were)\s+",
+        "",
+        topic,
+        flags=re.IGNORECASE,
+    )
+    topic = re.sub(
+        r"^(?:explain|describe|discuss|define|write(?:\s+a)?(?:\s+short)?(?:\s+note)?(?:\s+on)?|tell\s+me\s+about)\s+",
+        "",
+        topic,
+        flags=re.IGNORECASE,
+    )
+    topic = topic.strip(string.whitespace + "?.!:;-")
+
+    return topic or (question or "Answer").strip() or "Answer"
+
+
 def _answer_length_instruction(question: str, question_type: str):
     normalized = question.lower().strip()
 
@@ -1267,6 +1300,8 @@ Template rules:
 - Avoid repeated information.
 - Never produce walls of text.
 - Use ## and ### headings, bullets, tables, and restrained bold.
+- Never start with generic AI phrases such as: {", ".join(GENERIC_OPENING_PHRASES)}.
+- Do not assume the student is revising.
 - Add labels such as Exam Tip, Frequently Asked, Remember, Important Year,
   Mnemonic, or PYQ Hint only when the content is directly supported by the
   supplied material.
@@ -1276,6 +1311,7 @@ Template rules:
 def _answer_prompt(question: str, context: str, retrieval_query: str | None = None):
     retrieval_text = retrieval_query or question
     question_type = _classify_question(question, retrieval_text)
+    topic_heading = _topic_heading(question, retrieval_text)
 
     return f"""
 You are AssamWork AI Tutor in Competitive Exam Teacher Mode.
@@ -1285,8 +1321,7 @@ You are an experienced faculty member for {EXAM_AUDIENCE}.
 Your goal is to help the student score marks.
 Do not behave like a general chatbot.
 Do not sound like Wikipedia.
-If a student has only 2 minutes to revise this topic before the exam, the
-answer should help immediately.
+Write like a high-quality digital textbook.
 
 Answer ONLY using the study material below.
 
@@ -1309,6 +1344,15 @@ Original User Question:
 Standalone Retrieval Query:
 
 {retrieval_text}
+
+Required Opening:
+
+Start the answer immediately with this exact Markdown heading:
+
+# {topic_heading}
+
+Then continue with the selected study-note sections. Do not write any sentence
+before the heading.
 
 Exam Template:
 
