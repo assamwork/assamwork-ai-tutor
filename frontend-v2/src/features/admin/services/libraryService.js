@@ -33,9 +33,16 @@ async function requestError(response, fallback) {
   return error;
 }
 
-export async function getLibrary({ signal } = {}) {
+export async function getLibrary({ query = "", signal } = {}) {
   const token = await getToken();
-  const response = await fetch(`${API_URL}/library`, {
+  const params = new URLSearchParams();
+
+  if (query.trim()) {
+    params.set("query", query.trim());
+  }
+
+  const url = `${API_URL}/library${params.toString() ? `?${params}` : ""}`;
+  const response = await fetch(url, {
     signal,
     headers: {
       Authorization: `Bearer ${token}`,
@@ -108,9 +115,12 @@ export async function deleteBook({ subject, book, signal } = {}) {
   return response.json();
 }
 
-export async function reindexLibrary({ signal } = {}) {
+export async function reindexLibrary({ force = false, signal } = {}) {
   const token = await getToken();
-  const response = await fetch(`${API_URL}/admin/library/reindex`, {
+  const endpoint = force
+    ? "/admin/library/reindex/all"
+    : "/admin/library/reindex/changed";
+  const response = await fetch(`${API_URL}${endpoint}`, {
     method: "POST",
     signal,
     headers: {

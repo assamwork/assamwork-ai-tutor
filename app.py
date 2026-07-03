@@ -17,6 +17,7 @@ from fastapi import (
     Form,
     Header,
     HTTPException,
+    Query,
     Request,
     UploadFile,
     status,
@@ -398,8 +399,8 @@ async def ask_stream(question: Question, request: Request):
 
 
 @app.get("/library", dependencies=[Depends(require_admin)])
-async def library():
-    return await run_in_threadpool(get_library)
+async def library(query: str = Query(default="")):
+    return await run_in_threadpool(get_library, query)
 
 
 @app.post(
@@ -480,9 +481,9 @@ async def delete_library_book(request: DeleteBookRequest):
         library_job_lock.release()
 
 
-def _run_reindex():
+def _run_reindex(force: bool = False):
     try:
-        result = ingest_library()
+        result = ingest_library(force=force)
         finished_at = datetime.now(timezone.utc).isoformat()
 
         with indexing_state_lock:
@@ -530,6 +531,26 @@ def _run_reindex():
     dependencies=[Depends(require_admin)],
 )
 async def reindex_library():
+    return await reindex_library_with_options(force=False)
+
+
+@app.post(
+    "/admin/library/reindex/changed",
+    dependencies=[Depends(require_admin)],
+)
+async def reindex_changed_library():
+    return await reindex_library_with_options(force=False)
+
+
+@app.post(
+    "/admin/library/reindex/all",
+    dependencies=[Depends(require_admin)],
+)
+async def reindex_all_library():
+    return await reindex_library_with_options(force=True)
+
+
+async def reindex_library_with_options(force: bool = False):
     if not library_job_lock.acquire(blocking=False):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -544,7 +565,7 @@ async def reindex_library():
         indexing_state["finishedAt"] = None
 
     try:
-        return await run_in_threadpool(_run_reindex)
+        return await run_in_threadpool(_run_reindex, force)
     except Exception as error:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

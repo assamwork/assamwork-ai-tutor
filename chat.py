@@ -11,7 +11,7 @@ from google import genai
 from google.genai import types
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 
-from library import COLLECTION_NAME, DATABASE_PATH
+from library import COLLECTION_NAME, DATABASE_PATH, record_book_usage
 from services.ai_service import AIService, AIServiceDependencies
 from services.cache_manager import LocalJSONCacheManager
 
@@ -1635,6 +1635,7 @@ def get_ai_service():
             generate_knowledge_answer=generate_knowledge_answer,
             stream_knowledge_answer=stream_knowledge_answer,
             generate_revision=generate_revision,
+            record_sources_used=record_book_usage,
         )
         _ai_service = AIService(
             dependencies=dependencies,

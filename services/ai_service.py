@@ -58,6 +58,7 @@ class AIServiceDependencies:
     generate_knowledge_answer: Callable[[str, str, str], dict]
     stream_knowledge_answer: Callable[[str, str, str], Iterable[str]]
     generate_revision: Callable[[str, str, str], str]
+    record_sources_used: Callable[[list], None] | None = None
 
 
 class AIMetrics:
@@ -179,6 +180,7 @@ class AIService:
                 if route["mode"] != "cached":
                     self._store_package(package, trace_id)
 
+            self._record_sources_used(package)
             return package.to_chat_response()
         finally:
             elapsed = time.perf_counter() - started_at
@@ -214,6 +216,7 @@ class AIService:
                     "text": package.answer,
                 }
                 yield self._metadata_event(package)
+                self._record_sources_used(package)
                 return
 
             route = self.route_question(question, history, trace_id)
@@ -225,6 +228,7 @@ class AIService:
                     "text": package.answer,
                 }
                 yield self._metadata_event(package)
+                self._record_sources_used(package)
                 return
 
             if route["mode"] == "cached":
@@ -234,6 +238,7 @@ class AIService:
                     "text": package.answer,
                 }
                 yield self._metadata_event(package)
+                self._record_sources_used(package)
                 return
 
             if route["mode"] == "gemini_fallback":
@@ -253,6 +258,7 @@ class AIService:
 
             if package is not None and not (stop_event and stop_event.is_set()):
                 self._store_package(package, trace_id)
+                self._record_sources_used(package)
         finally:
             elapsed = time.perf_counter() - started_at
             self.metrics.record_response_time(elapsed)
@@ -680,6 +686,19 @@ class AIService:
             len(package.answer),
             len(package.sources or []),
         )
+
+    def _record_sources_used(self, package: AnswerPackage | None):
+        if (
+            not package
+            or not package.sources
+            or not self.dependencies.record_sources_used
+        ):
+            return
+
+        try:
+            self.dependencies.record_sources_used(package.sources)
+        except Exception as error:
+            logger.warning("Unable to record library source usage: %s", error)
 
     def _cache_key(self, question: str):
         return self.normalizer.cache_key(question)

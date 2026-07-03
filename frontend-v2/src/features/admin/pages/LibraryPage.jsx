@@ -7,6 +7,8 @@ import {
 } from "react";
 import {
   Activity,
+  AlertTriangle,
+  BarChart3,
   BookOpen,
   Bot,
   Boxes,
@@ -16,6 +18,7 @@ import {
   DatabaseZap,
   FileText,
   LibraryBig,
+  Layers,
   RefreshCw,
   Search,
   Server,
@@ -65,6 +68,29 @@ function formatDate(value) {
     month: "short",
     year: "numeric",
   }).format(date);
+}
+
+function formatNumber(value) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value.toLocaleString("en-IN")
+    : "—";
+}
+
+function formatBytes(value) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function healthValue(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "number") return value.toLocaleString("en-IN");
+  if (Array.isArray(value)) return value.length.toLocaleString("en-IN");
+
+  return String(value);
 }
 
 function statusStyles(status) {
@@ -259,7 +285,7 @@ export default function LibraryPage() {
     }
   }
 
-  async function handleReindex() {
+  async function handleReindex({ force = false } = {}) {
     if (indexing) return;
 
     setIndexing(true);
@@ -267,7 +293,7 @@ export default function LibraryPage() {
     let jobStillRunning = false;
 
     try {
-      const result = await reindexLibrary();
+      const result = await reindexLibrary({ force });
 
       if (!result.success) {
         const firstError = result.errors?.[0]?.error;
@@ -285,7 +311,7 @@ export default function LibraryPage() {
             : result.message,
         details: `${result.booksProcessed ?? 0} book(s), ${
           result.chunksAdded ?? 0
-        } chunk(s) indexed.`,
+        } chunk(s) indexed, ${result.booksSkipped ?? 0} unchanged skipped.`,
       });
       pendingUploadRef.current = false;
       retry();
@@ -347,7 +373,9 @@ export default function LibraryPage() {
             details: state.lastResult.success
               ? `${state.lastResult.booksProcessed ?? 0} book(s), ${
                   state.lastResult.chunksAdded ?? 0
-                } chunk(s) indexed.`
+                } chunk(s) indexed, ${
+                  state.lastResult.booksSkipped ?? 0
+                } unchanged skipped.`
               : state.lastResult.errors?.[0]?.error,
           });
         }
@@ -379,6 +407,7 @@ export default function LibraryPage() {
 
       try {
         const library = await getLibrary({
+          query,
           signal: controller.signal,
         });
 
@@ -399,18 +428,10 @@ export default function LibraryPage() {
     void loadLibrary();
 
     return () => controller.abort();
-  }, [reloadKey]);
+  }, [reloadKey, query]);
 
   const filteredBooks = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-
-    if (!normalizedQuery) return books;
-
-    return books.filter((book) =>
-      `${book.book || ""} ${book.subject || ""}`
-        .toLowerCase()
-        .includes(normalizedQuery)
-    );
+    return books;
   }, [books, query]);
 
   const groups = useMemo(() => {
@@ -433,6 +454,38 @@ export default function LibraryPage() {
     const knownChunks = books
       .filter((book) => typeof book.chunks === "number")
       .reduce((total, book) => total + book.chunks, 0);
+    const knownPages = books
+      .filter((book) => typeof book.pageCount === "number")
+      .reduce((total, book) => total + book.pageCount, 0);
+    const questionsAnswered = books.reduce(
+      (total, book) => total + (Number(book.questionsAnswered) || 0),
+      0
+    );
+    const health = books.reduce(
+      (result, book) => {
+        const bookHealth = book.health || {};
+        const indexingErrors = Array.isArray(bookHealth.indexingErrors)
+          ? bookHealth.indexingErrors.length
+          : 0;
+
+        result.totalChunks += Number(bookHealth.totalChunks) || 0;
+        result.totalChunkSize +=
+          (Number(bookHealth.averageChunkSize) || 0) *
+          (Number(bookHealth.totalChunks) || 0);
+        result.missingPageMetadata +=
+          Number(bookHealth.missingPageMetadata) || 0;
+        result.duplicateChunks += Number(bookHealth.duplicateChunks) || 0;
+        result.indexingErrors += indexingErrors;
+        return result;
+      },
+      {
+        totalChunks: 0,
+        totalChunkSize: 0,
+        missingPageMetadata: 0,
+        duplicateChunks: 0,
+        indexingErrors: 0,
+      }
+    );
     const hasKnownChunks = books.some(
       (book) => typeof book.chunks === "number"
     );
@@ -447,10 +500,19 @@ export default function LibraryPage() {
       chunks: hasKnownChunks
         ? knownChunks.toLocaleString("en-IN")
         : "—",
+      pages: knownPages > 0 ? knownPages.toLocaleString("en-IN") : "—",
+      questionsAnswered: questionsAnswered.toLocaleString("en-IN"),
       updated:
         timestamps.length > 0
           ? formatDate(Math.max(...timestamps))
           : "—",
+      health: {
+        ...health,
+        averageChunkSize:
+          health.totalChunks > 0
+            ? Math.round(health.totalChunkSize / health.totalChunks)
+            : 0,
+      },
     };
   }, [books]);
 
@@ -468,15 +530,21 @@ export default function LibraryPage() {
       color: "bg-indigo-50 text-indigo-600",
     },
     {
-      label: "Estimated Chunks",
+      label: "Indexed Chunks",
       value: statistics.chunks,
       icon: FileText,
       color: "bg-violet-50 text-violet-600",
     },
     {
-      label: "Last Updated",
-      value: statistics.updated,
-      icon: CalendarClock,
+      label: "PDF Pages",
+      value: statistics.pages,
+      icon: Layers,
+      color: "bg-emerald-50 text-emerald-600",
+    },
+    {
+      label: "Questions Answered",
+      value: statistics.questionsAnswered,
+      icon: BarChart3,
       color: "bg-emerald-50 text-emerald-600",
     },
   ];
@@ -602,6 +670,61 @@ export default function LibraryPage() {
                 </div>
               );
             })}
+          </div>
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+                <AlertTriangle size={21} />
+              </div>
+              <div>
+                <h2 className="font-bold text-slate-950">Chunk Health</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Index quality signals measured from stored Chroma chunks.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+            {[
+              {
+                label: "Total chunks",
+                value: statistics.health.totalChunks,
+              },
+              {
+                label: "Avg chunk size",
+                value:
+                  statistics.health.averageChunkSize > 0
+                    ? `${statistics.health.averageChunkSize} chars`
+                    : "—",
+              },
+              {
+                label: "Missing embeddings",
+                value: "Not measured",
+              },
+              {
+                label: "Duplicate chunks",
+                value: statistics.health.duplicateChunks,
+              },
+              {
+                label: "Indexing errors",
+                value: statistics.health.indexingErrors,
+              },
+              {
+                label: "Missing pages",
+                value: statistics.health.missingPageMetadata,
+              },
+            ].map(({ label, value }) => (
+              <div key={label} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-sm font-bold text-slate-900">
+                  {healthValue(value)}
+                </p>
+                <p className="mt-1 text-[11px] text-slate-500">{label}</p>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -736,31 +859,42 @@ export default function LibraryPage() {
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
                 <DatabaseZap size={19} />
               </div>
-              <div>
-                <p className="text-sm font-bold text-slate-800">
-                  Make uploaded PDFs available to AI
-                </p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">
-                  Run this after uploading PDFs to make them available to AI
-                  answers.
-                </p>
+                <div>
+                  <p className="text-sm font-bold text-slate-800">
+                    Re-index changed books
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    Smart indexing skips unchanged PDFs and keeps full rebuild
+                    available for manual maintenance.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => handleReindex({ force: false })}
+                  disabled={indexing || uploading}
+                  className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {indexing ? (
+                    <RefreshCw size={17} className="animate-spin" />
+                  ) : (
+                    <DatabaseZap size={17} />
+                  )}
+                  {indexing ? "Indexing PDFs…" : "Re-index changed books"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleReindex({ force: true })}
+                  disabled={indexing || uploading}
+                  className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <RefreshCw size={17} />
+                  Re-index all
+                </button>
               </div>
             </div>
-
-            <button
-              type="button"
-              onClick={handleReindex}
-              disabled={indexing || uploading}
-              className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {indexing ? (
-                <RefreshCw size={17} className="animate-spin" />
-              ) : (
-                <DatabaseZap size={17} />
-              )}
-              {indexing ? "Indexing PDFs…" : "Make Available to AI"}
-            </button>
-          </div>
 
           {indexMessage && (
             <div
@@ -798,14 +932,14 @@ export default function LibraryPage() {
           <div className="border-b border-slate-200 p-4 sm:p-5">
             <label className="flex max-w-xl items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 focus-within:border-blue-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-blue-50">
               <Search size={18} className="shrink-0 text-slate-400" />
-              <input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search by book or subject"
-                aria-label="Search ebook library"
-                className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none"
-              />
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search subject, filename, or PDF content"
+                  aria-label="Search ebook library"
+                  className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none"
+                />
             </label>
           </div>
 
@@ -854,9 +988,9 @@ export default function LibraryPage() {
               <p className="mt-4 font-bold text-slate-800">
                 No matching ebooks
               </p>
-              <p className="mt-1 text-sm text-slate-500">
-                Try another book name or subject.
-              </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Try another book name, subject, filename, or content phrase.
+                </p>
             </div>
           ) : (
             <div className="divide-y divide-slate-200">
@@ -870,66 +1004,124 @@ export default function LibraryPage() {
                     </span>
                   </div>
 
-                  <div className="space-y-2">
-                    {subjectBooks.map((book, index) => (
-                      <article
-                        key={`${book.subject}-${book.book}-${index}`}
-                        className="grid min-w-0 gap-3 rounded-xl border border-slate-200 p-3.5 sm:grid-cols-[minmax(0,1fr)_130px_100px_110px_44px] sm:items-center"
-                      >
-                        <div className="flex min-w-0 items-center gap-3">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
-                            <FileText size={18} />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="break-words text-sm font-bold text-slate-800">
-                              {book.book || "Unknown book"}
-                            </p>
-                            <p className="mt-1 text-xs text-slate-500 sm:hidden">
-                              {book.subject || "Unknown subject"}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="text-xs text-slate-500">
-                          <span className="font-semibold text-slate-700 sm:hidden">
-                            Uploaded:{" "}
-                          </span>
-                          {formatDate(book.uploadedAt)}
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          <span className="font-semibold text-slate-700 sm:hidden">
-                            Chunks:{" "}
-                          </span>
-                          {typeof book.chunks === "number"
-                            ? book.chunks.toLocaleString("en-IN")
-                            : "—"}
-                        </div>
-                        <div>
-                          <span
-                            className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-bold ${statusStyles(book.status)}`}
-                          >
-                            {statusLabel(book.status)}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(book)}
-                          disabled={
-                            deletingBook === `${book.subject}/${book.book}`
-                          }
-                          aria-label={`Delete ${book.book}`}
-                          className="flex h-10 w-10 items-center justify-center rounded-xl border border-red-200 text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    <div className="space-y-2">
+                      {subjectBooks.map((book, index) => (
+                        <article
+                          key={`${book.subject}-${book.book}-${index}`}
+                          className="min-w-0 rounded-xl border border-slate-200 p-4"
                         >
-                          {deletingBook ===
-                          `${book.subject}/${book.book}` ? (
-                            <RefreshCw size={16} className="animate-spin" />
-                          ) : (
-                            <Trash2 size={16} />
-                          )}
-                        </button>
-                      </article>
-                    ))}
-                  </div>
+                          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="flex min-w-0 items-start gap-3">
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
+                                <FileText size={18} />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="break-words text-sm font-bold text-slate-800">
+                                    {book.book || "Unknown book"}
+                                  </p>
+                                  <span
+                                    className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-bold ${statusStyles(book.status)}`}
+                                  >
+                                    {statusLabel(book.status)}
+                                  </span>
+                                </div>
+                                <p className="mt-1 text-xs text-slate-500">
+                                  {book.filename || book.book || "Unknown filename"}
+                                </p>
+                                <p className="mt-1 text-xs text-slate-500">
+                                  Accuracy: {book.accuracy || "Not measured"}
+                                </p>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(book)}
+                              disabled={
+                                deletingBook === `${book.subject}/${book.book}`
+                              }
+                              aria-label={`Delete ${book.book}`}
+                              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-red-200 text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {deletingBook ===
+                              `${book.subject}/${book.book}` ? (
+                                <RefreshCw size={16} className="animate-spin" />
+                              ) : (
+                                <Trash2 size={16} />
+                              )}
+                            </button>
+                          </div>
+
+                          <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
+                            {[
+                              ["Subject", book.subject || "Unknown"],
+                              ["Version", `v${book.currentVersion || book.version || 1}`],
+                              ["Pages", formatNumber(book.pageCount)],
+                              ["Chunks", formatNumber(book.chunks)],
+                              ["Answered", formatNumber(book.questionsAnswered)],
+                              ["Last used", formatDate(book.lastUsedAt)],
+                              ["Indexed", formatDate(book.lastIndexedAt || book.indexedAt)],
+                              ["Uploaded", formatDate(book.uploadedAt)],
+                            ].map(([label, value]) => (
+                              <div key={label} className="rounded-lg bg-slate-50 p-2.5">
+                                <p className="truncate text-xs font-bold text-slate-800" title={String(value)}>
+                                  {value}
+                                </p>
+                                <p className="mt-1 text-[10px] text-slate-500">
+                                  {label}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="mt-3 grid gap-2 md:grid-cols-3 xl:grid-cols-6">
+                            {[
+                              ["Avg chunk", book.health?.averageChunkSize ? `${book.health.averageChunkSize} chars` : "—"],
+                              ["Missing embeddings", book.health?.missingEmbeddings ?? "Not measured"],
+                              ["Duplicates", book.health?.duplicateChunks ?? 0],
+                              ["Index errors", Array.isArray(book.health?.indexingErrors) ? book.health.indexingErrors.length : 0],
+                              ["Missing pages", book.health?.missingPageMetadata ?? 0],
+                              ["File size", formatBytes(book.fileSize)],
+                            ].map(([label, value]) => (
+                              <div key={label} className="rounded-lg border border-slate-100 px-2.5 py-2 text-xs">
+                                <span className="font-semibold text-slate-700">{label}: </span>
+                                <span className="text-slate-500">{healthValue(value)}</span>
+                              </div>
+                            ))}
+                          </div>
+
+                          {Array.isArray(book.health?.indexingErrors) &&
+                            book.health.indexingErrors.length > 0 && (
+                              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                                {book.health.indexingErrors[0]}
+                              </div>
+                            )}
+
+                          {Array.isArray(book.searchMatches) &&
+                            book.searchMatches.length > 0 && (
+                              <div className="mt-3 space-y-2">
+                                {book.searchMatches.map((match, matchIndex) => (
+                                  <div
+                                    key={`${match.chunkId || match.type}-${matchIndex}`}
+                                    className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-900"
+                                  >
+                                    <p className="font-bold">
+                                      {match.book || book.book} ·{" "}
+                                      {match.page
+                                        ? `Page ${match.page}`
+                                        : "Book metadata"}
+                                    </p>
+                                    <p className="mt-1 leading-5 text-blue-800">
+                                      {match.preview}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                        </article>
+                      ))}
+                    </div>
                 </div>
               ))}
             </div>

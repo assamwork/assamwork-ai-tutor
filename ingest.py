@@ -8,6 +8,13 @@ from chromadb.utils.embedding_functions import (
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
 
+from library import (
+    get_book_metadata,
+    mark_book_index_error,
+    mark_book_indexed,
+    sync_library_metadata,
+)
+
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 KNOWLEDGE_ROOT = PROJECT_ROOT / "knowledge"
@@ -93,7 +100,42 @@ def _delete_missing_pdf_chunks(collection, pdf_files):
     return len(stale_ids)
 
 
-def ingest_library():
+def _existing_book_chunk_count(collection, subject: str, book: str):
+    try:
+        existing = collection.get(
+            where={
+                "$and": [
+                    {"subject": subject},
+                    {"book": book},
+                ]
+            },
+            include=[],
+        )
+    except Exception:
+        return 0
+
+    return len(existing.get("ids") or [])
+
+
+def _delete_book_chunks(collection, subject: str, book: str):
+    existing = collection.get(
+        where={
+            "$and": [
+                {"subject": subject},
+                {"book": book},
+            ]
+        },
+        include=[],
+    )
+    ids = existing.get("ids") or []
+
+    for start in range(0, len(ids), UPSERT_BATCH_SIZE):
+        collection.delete(ids=ids[start:start + UPSERT_BATCH_SIZE])
+
+    return len(ids)
+
+
+def ingest_library(force: bool = False):
     logger.info(
         "Starting AssamWork library ingestion. Database path: %s, "
         "collection: %s",
@@ -114,7 +156,9 @@ def ingest_library():
     )
 
     pdf_files = _pdf_files()
+    sync_library_metadata()
     books_processed = 0
+    books_skipped = 0
     chunks_added = 0
     chunks_deleted = _delete_missing_pdf_chunks(collection, pdf_files)
     errors = []
@@ -124,6 +168,27 @@ def ingest_library():
         book = pdf.name
 
         try:
+            book_metadata = get_book_metadata(subject, book) or {}
+            existing_chunk_count = _existing_book_chunk_count(
+                collection,
+                subject,
+                book,
+            )
+            needs_index = (
+                force
+                or not book_metadata.get("indexed_at")
+                or existing_chunk_count == 0
+            )
+
+            if not needs_index:
+                books_skipped += 1
+                logger.info(
+                    "Skipping unchanged ebook '%s' under subject '%s'.",
+                    book,
+                    subject,
+                )
+                continue
+
             pages = _extract_pages(pdf)
             chunks = []
 
@@ -141,6 +206,7 @@ def ingest_library():
             if not chunks:
                 raise ValueError("No extractable text was found.")
 
+            chunks_deleted += _delete_book_chunks(collection, subject, book)
             ids = [
                 _chunk_id(subject, book, chunk["pdf_page_index"], index)
                 for index, chunk in enumerate(chunks)
@@ -183,6 +249,7 @@ def ingest_library():
 
             books_processed += 1
             chunks_added += len(chunks)
+            mark_book_indexed(subject, book, len(chunks))
         except Exception as error:
             logger.error(
                 "Failed to index ebook '%s' under subject '%s'. "
@@ -199,26 +266,31 @@ def ingest_library():
                     "error": str(error),
                 }
             )
+            mark_book_index_error(subject, book, str(error))
 
     if not pdf_files:
         message = "No PDF ebooks were found in the knowledge library."
     elif errors:
         message = (
             f"Indexed {books_processed} of {len(pdf_files)} ebook(s). "
+            f"{books_skipped} unchanged ebook(s) skipped. "
             f"{len(errors)} ebook(s) failed."
         )
     else:
         message = (
             f"Library indexed successfully. "
-            f"{books_processed} ebook(s) processed."
+            f"{books_processed} ebook(s) processed, "
+            f"{books_skipped} unchanged ebook(s) skipped."
         )
 
     return {
         "success": len(errors) == 0,
         "message": message,
         "booksProcessed": books_processed,
+        "booksSkipped": books_skipped,
         "chunksAdded": chunks_added,
         "chunksDeleted": chunks_deleted,
+        "force": force,
         "errors": errors,
     }
 
@@ -229,6 +301,7 @@ def main():
     print("\n===============================")
     print(result["message"])
     print(f"Books processed : {result['booksProcessed']}")
+    print(f"Books skipped   : {result['booksSkipped']}")
     print(f"Chunks indexed  : {result['chunksAdded']}")
     print(f"Chunks deleted  : {result['chunksDeleted']}")
 
