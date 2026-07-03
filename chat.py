@@ -11,6 +11,8 @@ from google.genai import types
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 
 from library import COLLECTION_NAME, DATABASE_PATH
+from services.ai_service import AIService, AIServiceDependencies
+from services.cache_manager import LocalJSONCacheManager
 
 load_dotenv()
 
@@ -18,6 +20,7 @@ logger = logging.getLogger(__name__)
 _rag_lock = threading.Lock()
 _client = None
 _collection = None
+_ai_service = None
 
 CLARIFICATION_MESSAGE = (
     "Please clarify what you want me to refer to, so I can answer "
@@ -1059,99 +1062,42 @@ def generate_general_answer(question: str, retrieval_query: str):
     return _fallback_answer_text(response.text)
 
 
-def _route_question(question: str, history=None, trace_id: str | None = None):
-    _trace(
-        trace_id,
-        "route start question=%r history_len=%s",
-        question,
-        len(_normalize_history(history)),
-    )
-
-    if _is_greeting(question):
-        _trace(
-            trace_id,
-            "Mode: Greeting Bypass. Source count returned: 0. Query: %s",
+def generate_knowledge_answer(question: str, context: str, retrieval_query: str):
+    response = get_client().models.generate_content(
+        model="gemini-2.5-flash",
+        contents=_structured_prompt(
             question,
-        )
-        _trace(trace_id, "route return mode=greeting sources=0")
-        return {
-            "mode": "greeting",
-            "answer": _greeting_answer(),
-            "revision": "",
-            "sources": [],
-            "confidence": None,
-            "retrieval_query": question,
-            "context": "",
-        }
-
-    rewrite = rewrite_question(question, history, trace_id)
-
-    if rewrite["clarification"]:
-        _trace(
-            trace_id,
-            "Mode: Clarification. Source count returned: 0. Query: %s",
-            question,
-        )
-        _trace(trace_id, "route return mode=clarification sources=0")
-        return {
-            "mode": "clarification",
-            "answer": rewrite["clarification"],
-            "revision": "",
-            "sources": [],
-            "confidence": None,
-            "retrieval_query": rewrite["query"],
-            "context": "",
-        }
-
-    retrieval_query = _normalize_retrieval_query(rewrite["query"])
-    if retrieval_query != rewrite["query"]:
-        _trace(
-            trace_id,
-            "route normalized retrieval_query from %r to %r",
-            rewrite["query"],
+            context,
             retrieval_query,
-        )
-    _trace(trace_id, "route retrieval_query=%r", retrieval_query)
-    rag = _retrieve_context(retrieval_query, trace_id)
-    confidence = rag.get("confidence") or {}
-    mode = (
-        "knowledge_base"
-        if confidence.get("mode") == "knowledge_base"
-        else "gemini_fallback"
-    )
-    sources = rag["sources"] if mode == "knowledge_base" else []
-    source_count = len(sources)
-    log_mode = (
-        "Knowledge Base"
-        if mode == "knowledge_base"
-        else "Gemini Fallback"
+        ),
+        config=_json_config(_answer_schema()),
     )
 
-    _trace(
-        trace_id,
-        "Mode: %s. Reason: %s. Source count returned: %s. Query: %s",
-        log_mode,
-        confidence.get("reason", "unknown"),
-        source_count,
-        retrieval_query,
-    )
-    _trace(
-        trace_id,
-        "route return mode=%s context_chars=%s sources=%s",
-        mode,
-        len(rag["context"] if mode == "knowledge_base" else ""),
-        source_count,
+    return _parse_structured_answer(response.text)
+
+
+def stream_general_answer(question: str, retrieval_query: str):
+    stream = get_client().models.generate_content_stream(
+        model="gemini-2.5-flash",
+        contents=_general_knowledge_prompt(question, retrieval_query),
     )
 
-    return {
-        "mode": mode,
-        "answer": "",
-        "revision": "",
-        "sources": sources,
-        "confidence": confidence,
-        "retrieval_query": retrieval_query,
-        "context": rag["context"] if mode == "knowledge_base" else "",
-    }
+    for chunk in stream:
+        yield getattr(chunk, "text", "") or ""
+
+
+def stream_knowledge_answer(question: str, context: str, retrieval_query: str):
+    stream = get_client().models.generate_content_stream(
+        model="gemini-2.5-flash",
+        contents=_answer_prompt(question, context, retrieval_query),
+    )
+
+    for chunk in stream:
+        yield getattr(chunk, "text", "") or ""
+
+
+def _route_question(question: str, history=None, trace_id: str | None = None):
+    return get_ai_service().route_question(question, history, trace_id)
 
 
 def stream_answer(
@@ -1160,180 +1106,13 @@ def stream_answer(
     stop_event: threading.Event | None = None,
     trace_id: str | None = None,
 ):
-    _trace(trace_id, "stream_answer start streaming_path=true")
-    route = _route_question(question, history, trace_id)
-
-    if route["mode"] in {"greeting", "clarification"}:
-        _trace(
-            trace_id,
-            "stream_answer return immediate mode=%s sources=0",
-            route["mode"],
-        )
-        yield {
-            "type": "chunk",
-            "text": route["answer"],
-        }
-        yield {
-            "type": "metadata",
-            "sources": [],
-            "revision": "",
-            "confidence": None,
-        }
-        return
-
-    retrieval_query = route["retrieval_query"]
-    confidence = route.get("confidence") or {}
-
-    if route["mode"] == "gemini_fallback":
-        _trace(trace_id, "stream_answer branch=gemini_fallback sources=0")
-        answer_parts = []
-
-        try:
-            yield {
-                "type": "chunk",
-                "text": f"{GEMINI_FALLBACK_NOTICE}\n\n",
-            }
-            stream = get_client().models.generate_content_stream(
-                model="gemini-2.5-flash",
-                contents=_general_knowledge_prompt(question, retrieval_query),
-            )
-
-            for chunk in stream:
-                if stop_event and stop_event.is_set():
-                    _trace(
-                        trace_id,
-                        "stream_answer return stopped mode=gemini_fallback answer_chars=%s sources=0",
-                        len(f"{GEMINI_FALLBACK_NOTICE}\n\n{''.join(answer_parts)}"),
-                    )
-                    return
-
-                text = getattr(chunk, "text", "") or ""
-
-                if not text:
-                    continue
-
-                answer_parts.append(text)
-                yield {
-                    "type": "chunk",
-                    "text": text,
-                }
-
-            if not "".join(answer_parts).strip():
-                yield {
-                    "type": "chunk",
-                    "text": "No answer returned.",
-                }
-
-            yield {
-                "type": "metadata",
-                "sources": [],
-                "revision": "",
-                "confidence": confidence,
-            }
-            _trace(
-                trace_id,
-                "stream_answer return metadata mode=gemini_fallback answer_chars=%s sources=0",
-                len(f"{GEMINI_FALLBACK_NOTICE}\n\n{''.join(answer_parts)}"),
-            )
-        except Exception as error:
-            logger.warning("Unable to stream Gemini fallback answer: %s", error)
-            error_text = _fallback_generation_error_text()
-            yield {
-                "type": "chunk",
-                "text": error_text.replace(f"{GEMINI_FALLBACK_NOTICE}\n\n", ""),
-            }
-            yield {
-                "type": "metadata",
-                "sources": [],
-                "revision": "",
-                "confidence": confidence,
-            }
-            _trace(
-                trace_id,
-                "stream_answer return graceful_generation_error mode=gemini_fallback error=%r sources=0",
-                str(error),
-            )
-
-        return
-
-    context = route["context"]
-    sources = route["sources"]
-    _trace(
+    _trace(trace_id, "stream_answer delegate=AIService streaming_path=true")
+    yield from get_ai_service().stream_answer(
+        question,
+        history,
+        stop_event,
         trace_id,
-        "stream_answer branch=knowledge_base context_chars=%s sources=%s",
-        len(context),
-        len(sources),
     )
-    answer_parts = []
-
-    try:
-        stream = get_client().models.generate_content_stream(
-            model="gemini-2.5-flash",
-            contents=_answer_prompt(question, context, retrieval_query),
-        )
-
-        for chunk in stream:
-            if stop_event and stop_event.is_set():
-                _trace(
-                    trace_id,
-                    "stream_answer return stopped mode=knowledge_base answer_chars=%s sources=%s",
-                    len("".join(answer_parts)),
-                    len(sources),
-                )
-                return
-
-            text = getattr(chunk, "text", "") or ""
-
-            if not text:
-                continue
-
-            answer_parts.append(text)
-            yield {
-                "type": "chunk",
-                "text": text,
-            }
-
-        answer = "".join(answer_parts).strip()
-
-        if not answer:
-            answer = "No answer returned."
-            yield {
-                "type": "chunk",
-                "text": answer,
-            }
-
-        revision = ""
-
-        if not (stop_event and stop_event.is_set()):
-            try:
-                revision = generate_revision(question, context, answer)
-            except Exception as error:
-                logger.warning("Unable to generate revision metadata: %s", error)
-
-        yield {
-            "type": "metadata",
-            "sources": sources,
-            "revision": revision,
-            "confidence": confidence,
-        }
-        _trace(
-            trace_id,
-            "stream_answer return metadata mode=knowledge_base answer_chars=%s sources=%s revision_chars=%s",
-            len(answer),
-            len(sources),
-            len(revision or ""),
-        )
-    except Exception as error:
-        logger.warning("Unable to stream Gemini answer: %s", error)
-        _trace(
-            trace_id,
-            "stream_answer return error mode=knowledge_base error=%r",
-            str(error),
-        )
-        yield {
-            "type": "error",
-            "message": "Unable to get an answer right now. Please try again.",
-        }
 
 
 def get_client():
@@ -1378,76 +1157,33 @@ def get_collection():
     return _collection
 
 
+def get_ai_service():
+    global _ai_service
+
+    if _ai_service is None:
+        cache_manager = LocalJSONCacheManager(DATABASE_PATH / "ai_cache.json")
+        dependencies = AIServiceDependencies(
+            trace=_trace,
+            is_greeting=_is_greeting,
+            greeting_answer=_greeting_answer,
+            normalize_history=_normalize_history,
+            rewrite_question=rewrite_question,
+            normalize_retrieval_query=_normalize_retrieval_query,
+            retrieve_context=_retrieve_context,
+            generate_general_answer=generate_general_answer,
+            stream_general_answer=stream_general_answer,
+            generate_knowledge_answer=generate_knowledge_answer,
+            stream_knowledge_answer=stream_knowledge_answer,
+            generate_revision=generate_revision,
+        )
+        _ai_service = AIService(
+            dependencies=dependencies,
+            cache_manager=cache_manager,
+        )
+
+    return _ai_service
+
+
 def ask_question(question: str, history=None, trace_id: str | None = None):
-    _trace(trace_id, "ask_question start streaming_path=false")
-    route = _route_question(question, history, trace_id)
-
-    if route["mode"] in {"greeting", "clarification"}:
-        _trace(
-            trace_id,
-            "ask_question return immediate mode=%s sources=0",
-            route["mode"],
-        )
-        return {
-            "answer": route["answer"],
-            "revision": "",
-            "sources": [],
-            "confidence": route.get("confidence"),
-        }
-
-    retrieval_query = route["retrieval_query"]
-
-    if route["mode"] == "gemini_fallback":
-        _trace(trace_id, "ask_question branch=gemini_fallback sources=0")
-        try:
-            answer = generate_general_answer(question, retrieval_query)
-        except Exception as error:
-            logger.warning("Unable to generate Gemini fallback answer: %s", error)
-            answer = _fallback_generation_error_text()
-            _trace(
-                trace_id,
-                "ask_question graceful_generation_error mode=gemini_fallback error=%r sources=0",
-                str(error),
-            )
-        _trace(
-            trace_id,
-            "ask_question return mode=gemini_fallback answer_chars=%s sources=0",
-            len(answer),
-        )
-        return {
-            "answer": answer,
-            "revision": "",
-            "sources": [],
-            "confidence": route.get("confidence"),
-        }
-
-    _trace(
-        trace_id,
-        "ask_question branch=knowledge_base context_chars=%s sources=%s",
-        len(route["context"]),
-        len(route["sources"]),
-    )
-    response = get_client().models.generate_content(
-        model="gemini-2.5-flash",
-        contents=_structured_prompt(
-            question,
-            route["context"],
-            retrieval_query,
-        ),
-        config=_json_config(_answer_schema()),
-    )
-    structured_answer = _parse_structured_answer(response.text)
-    _trace(
-        trace_id,
-        "ask_question return mode=knowledge_base answer_chars=%s sources=%s revision_chars=%s",
-        len(structured_answer["answer"]),
-        len(route["sources"]),
-        len(structured_answer["revision"] or ""),
-    )
-
-    return {
-        "answer": structured_answer["answer"],
-        "revision": structured_answer["revision"],
-        "sources": route["sources"],
-        "confidence": route.get("confidence"),
-    }
+    _trace(trace_id, "ask_question delegate=AIService streaming_path=false")
+    return get_ai_service().ask_question(question, history, trace_id)
