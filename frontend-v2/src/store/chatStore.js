@@ -37,6 +37,32 @@ function normalizeMessage(message) {
   };
 }
 
+function normalizeSources(rawSources = []) {
+  return rawSources.map((source) => ({
+    subject: source?.subject ?? null,
+    book: source?.book ?? null,
+    bookName: source?.bookName ?? null,
+    page:
+      source?.page ??
+      source?.pageNumber ??
+      source?.page_number ??
+      source?.source_page ??
+      source?.pdf_page ??
+      source?.pageNo ??
+      source?.page_no ??
+      source?.page_index ??
+      null,
+    page_number: source?.page_number ?? source?.pageNumber ?? null,
+    pageNumber: source?.pageNumber ?? source?.page_number ?? null,
+    source_page: source?.source_page ?? null,
+    pdf_page: source?.pdf_page ?? null,
+    page_index:
+      source?.page_index ??
+      source?.pageIndex ??
+      null,
+  }));
+}
+
 const useChatStore = create((set, get) => ({
   uid: null,
   initializedUid: null,
@@ -446,29 +472,7 @@ const useChatStore = create((set, get) => ({
         : Array.isArray(assistantMessage.sources)
         ? assistantMessage.sources
         : [];
-    const sources = rawSources.map((source) => ({
-      subject: source?.subject ?? null,
-      book: source?.book ?? null,
-      bookName: source?.bookName ?? null,
-      page:
-        source?.page ??
-        source?.pageNumber ??
-        source?.page_number ??
-        source?.source_page ??
-        source?.pdf_page ??
-        source?.pageNo ??
-        source?.page_no ??
-        source?.page_index ??
-        null,
-      page_number: source?.page_number ?? source?.pageNumber ?? null,
-      pageNumber: source?.pageNumber ?? source?.page_number ?? null,
-      source_page: source?.source_page ?? null,
-      pdf_page: source?.pdf_page ?? null,
-      page_index:
-        source?.page_index ??
-        source?.pageIndex ??
-        null,
-    }));
+    const sources = normalizeSources(rawSources);
 
     if (!uid || !chat || !content) return null;
 
@@ -525,6 +529,170 @@ const useChatStore = create((set, get) => ({
       }));
 
       return messageId;
+    } catch (error) {
+      console.error("Unable to save assistant message:", error);
+      set({
+        error: "The answer is visible but could not be saved to the cloud.",
+      });
+      return null;
+    }
+  },
+
+  startAssistantDraft(chatId = get().activeChatId) {
+    const chat = get().chats.find((item) => item.id === chatId);
+
+    if (!chat) return null;
+
+    const message = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: "",
+      revision: "",
+      sources: [],
+      isStreaming: true,
+      localOnly: true,
+      createdAt: new Date().toISOString(),
+    };
+
+    set((state) => ({
+      chats: state.chats.map((item) =>
+        item.id === chatId
+          ? {
+              ...item,
+              updatedAt: message.createdAt,
+              messageCount: item.messageCount + 1,
+              messages: [...item.messages, message],
+              messagesLoaded: true,
+            }
+          : item
+      ),
+    }));
+
+    return message.id;
+  },
+
+  updateAssistantDraft(chatId, messageId, updates = {}) {
+    set((state) => ({
+      chats: state.chats.map((chat) =>
+        chat.id === chatId
+          ? {
+              ...chat,
+              messages: chat.messages.map((message) =>
+                message.id === messageId
+                  ? {
+                      ...message,
+                      ...updates,
+                    }
+                  : message
+              ),
+            }
+          : chat
+      ),
+    }));
+  },
+
+  discardAssistantDraft(chatId, messageId) {
+    set((state) => ({
+      chats: state.chats.map((chat) =>
+        chat.id === chatId
+          ? {
+              ...chat,
+              messageCount: chat.messages.some(
+                (message) =>
+                  message.id === messageId && message.localOnly
+              )
+                ? Math.max(0, chat.messageCount - 1)
+                : chat.messageCount,
+              messages: chat.messages.filter(
+                (message) =>
+                  message.id !== messageId || !message.localOnly
+              ),
+            }
+          : chat
+      ),
+    }));
+  },
+
+  async finalizeAssistantDraft(
+    chatId,
+    messageId,
+    assistantMessage
+  ) {
+    const { uid } = get();
+    const chat = get().chats.find((item) => item.id === chatId);
+    const draft = chat?.messages.find(
+      (message) => message.id === messageId
+    );
+    const content = assistantMessage?.content || "No answer returned.";
+    const revision =
+      typeof assistantMessage?.revision === "string"
+        ? assistantMessage.revision
+        : "";
+    const sources = normalizeSources(
+      Array.isArray(assistantMessage?.sources)
+        ? assistantMessage.sources
+        : []
+    );
+    const completedAt = new Date().toISOString();
+
+    if (!uid || !chat || !messageId || !draft?.localOnly) {
+      return null;
+    }
+
+    set((state) => ({
+      chats: state.chats.map((item) =>
+        item.id === chatId
+          ? {
+              ...item,
+              updatedAt: completedAt,
+              messages: item.messages.map((message) =>
+                message.id === messageId
+                  ? {
+                      ...message,
+                      content,
+                      revision,
+                      sources,
+                      isStreaming: false,
+                      localOnly: false,
+                      createdAt: message.createdAt || completedAt,
+                    }
+                  : message
+              ),
+            }
+          : item
+      ),
+    }));
+
+    try {
+      const savedMessageId = await chatRepository.addMessage(
+        uid,
+        chatId,
+        "assistant",
+        content,
+        sources,
+        null,
+        revision
+      );
+
+      set((state) => ({
+        chats: state.chats.map((item) =>
+          item.id === chatId
+            ? {
+                ...item,
+                messages: item.messages.map((message) =>
+                  message.id === messageId
+                    ? {
+                        ...message,
+                        id: savedMessageId,
+                      }
+                    : message
+                ),
+              }
+            : item
+        ),
+      }));
+
+      return savedMessageId;
     } catch (error) {
       console.error("Unable to save assistant message:", error);
       set({

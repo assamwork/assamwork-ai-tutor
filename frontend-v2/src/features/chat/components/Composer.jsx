@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import useChatStore from "../../../store/chatStore";
 import ChatInputBar from "./ChatInputBar";
 
@@ -6,6 +6,10 @@ const API_URL =
   import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
 function getFriendlyChatError(error) {
+  if (error?.name === "AbortError") {
+    return "Generation stopped.";
+  }
+
   if (error?.message === "Unable to get an answer right now.") {
     return error.message;
   }
@@ -13,20 +17,153 @@ function getFriendlyChatError(error) {
   return "Unable to reach AssamWork AI. Please check your connection and try again.";
 }
 
+function parseSseEvent(rawEvent) {
+  const lines = rawEvent.split("\n");
+  let event = "message";
+  const dataLines = [];
+
+  for (const line of lines) {
+    if (line.startsWith("event:")) {
+      event = line.slice(6).trim();
+    } else if (line.startsWith("data:")) {
+      dataLines.push(line.slice(5).trimStart());
+    }
+  }
+
+  if (!dataLines.length) {
+    return {
+      event,
+      data: {},
+    };
+  }
+
+  try {
+    return {
+      event,
+      data: JSON.parse(dataLines.join("\n")),
+    };
+  } catch {
+    return {
+      event,
+      data: {},
+    };
+  }
+}
+
+async function streamAnswer({
+  question,
+  signal,
+  onChunk,
+  onMetadata,
+}) {
+  const response = await fetch(`${API_URL}/ask/stream`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+    },
+    body: JSON.stringify({
+      question,
+    }),
+    signal,
+  });
+
+  if (!response.ok || !response.body) {
+    throw new Error("Streaming endpoint unavailable.");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+
+    if (done) {
+      buffer += decoder.decode();
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+    const events = buffer.split("\n\n");
+    buffer = events.pop() ?? "";
+
+    for (const rawEvent of events) {
+      if (!rawEvent.trim()) continue;
+
+      const { event, data } = parseSseEvent(rawEvent);
+
+      if (event === "chunk") {
+        onChunk(data.text || "");
+      } else if (event === "metadata") {
+        onMetadata(data);
+      } else if (event === "error") {
+        throw new Error(
+          data.message || "Unable to get an answer right now."
+        );
+      }
+    }
+  }
+
+  if (buffer.trim()) {
+    const { event, data } = parseSseEvent(buffer);
+
+    if (event === "chunk") {
+      onChunk(data.text || "");
+    } else if (event === "metadata") {
+      onMetadata(data);
+    }
+  }
+}
+
+async function fetchFallbackAnswer(question, signal) {
+  const response = await fetch(`${API_URL}/ask`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      question,
+    }),
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error("Unable to get an answer right now.");
+  }
+
+  return response.json();
+}
+
 export default function Composer({
   prompt,
   setPrompt,
 }) {
   const sendingRef = useRef(false);
+  const abortControllerRef = useRef(null);
 
   const {
     addUserMessage,
     addAssistantMessage,
+    discardAssistantDraft,
+    finalizeAssistantDraft,
+    startAssistantDraft,
+    updateAssistantDraft,
     createChat,
     activeChatId,
     isLoading,
     setLoading,
   } = useChatStore();
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
+
+  function stopGenerating() {
+    abortControllerRef.current?.abort();
+  }
 
   async function sendMessage() {
     if (!prompt.trim() || isLoading || sendingRef.current) return;
@@ -34,6 +171,16 @@ export default function Composer({
     const question = prompt.trim();
     sendingRef.current = true;
     let targetChatId = activeChatId;
+    let draftMessageId = null;
+    let streamedAnswer = "";
+    let metadata = {
+      sources: [],
+      revision: "",
+      confidence: null,
+    };
+    let shouldFallback = false;
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     try {
       targetChatId = targetChatId || (await createChat());
@@ -50,48 +197,113 @@ export default function Composer({
       if (!savedUserMessageId) return;
 
       setPrompt("");
+      draftMessageId = startAssistantDraft(targetChatId);
 
-      const response = await fetch(
-        `${API_URL}/ask`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
+      if (!draftMessageId) return;
+
+      try {
+        await streamAnswer({
+          question,
+          signal: abortController.signal,
+          onChunk: (chunk) => {
+            if (!chunk) return;
+
+            streamedAnswer += chunk;
+            updateAssistantDraft(targetChatId, draftMessageId, {
+              content: streamedAnswer,
+              isStreaming: true,
+            });
           },
-          body: JSON.stringify({
-            question,
-          }),
+          onMetadata: (nextMetadata) => {
+            metadata = {
+              sources: nextMetadata.sources ?? [],
+              revision: nextMetadata.revision ?? "",
+              confidence: nextMetadata.confidence ?? null,
+            };
+            updateAssistantDraft(targetChatId, draftMessageId, {
+              revision: metadata.revision,
+              sources: metadata.sources,
+            });
+          },
+        });
+      } catch (streamError) {
+        if (streamError?.name === "AbortError") {
+          updateAssistantDraft(targetChatId, draftMessageId, {
+            content: streamedAnswer || "Generation stopped.",
+            isStreaming: false,
+            localOnly: true,
+          });
+          return;
         }
-      );
 
-      if (!response.ok) {
-        throw new Error("Unable to get an answer right now.");
+        shouldFallback =
+          streamError?.message === "Streaming endpoint unavailable." ||
+          streamError instanceof TypeError;
+
+        if (!shouldFallback) {
+          throw streamError;
+        }
       }
 
-      const data = await response.json();
+      if (shouldFallback) {
+        const data = await fetchFallbackAnswer(
+          question,
+          abortController.signal
+        );
+        streamedAnswer = data.answer ?? "No answer returned.";
+        metadata = {
+          sources: data.sources ?? [],
+          revision: data.revision ?? "",
+          confidence: data.confidence ?? null,
+        };
+        updateAssistantDraft(targetChatId, draftMessageId, {
+          content: streamedAnswer,
+          revision: metadata.revision,
+          sources: metadata.sources,
+          isStreaming: false,
+        });
+      }
 
-      await addAssistantMessage(
+      await finalizeAssistantDraft(
+        targetChatId,
+        draftMessageId,
         {
           content:
-            data.answer ??
+            streamedAnswer.trim() ||
             "No answer returned.",
-          revision: data.revision ?? "",
-          sources: data.sources ?? [],
-        },
-        targetChatId
+          revision: metadata.revision,
+          sources: metadata.sources,
+        }
       );
     } catch (err) {
       if (targetChatId) {
-        await addAssistantMessage(
-          {
-            content: getFriendlyChatError(err),
-            sources: [],
-          },
-          targetChatId
-        );
+        const errorMessage = getFriendlyChatError(err);
+
+        if (draftMessageId) {
+          await finalizeAssistantDraft(
+            targetChatId,
+            draftMessageId,
+            {
+              content: errorMessage,
+              revision: "",
+              sources: [],
+            }
+          );
+        } else {
+          await addAssistantMessage(
+            {
+              content: errorMessage,
+              sources: [],
+            },
+            targetChatId
+          );
+        }
+      } else if (draftMessageId) {
+        discardAssistantDraft(targetChatId, draftMessageId);
       }
     } finally {
       sendingRef.current = false;
+      abortControllerRef.current = null;
       setLoading(false);
     }
   }
@@ -103,6 +315,7 @@ export default function Composer({
           value={prompt}
           setValue={setPrompt}
           onSubmit={sendMessage}
+          onStop={stopGenerating}
           isLoading={isLoading}
           placeholder="Ask from AssamWork study materials..."
           ariaLabel="Ask from AssamWork study materials"

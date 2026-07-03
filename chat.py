@@ -83,6 +83,259 @@ def _parse_structured_answer(response_text: str):
     }
 
 
+def _sources_from_metadatas(metadatas):
+    sources = []
+
+    for item in metadatas:
+        item = item or {}
+        page = _metadata_page(item)
+        source = {
+            "subject": item.get("subject"),
+            "book": item.get("book"),
+            "page": page,
+            "page_number": page,
+            "source_page": item.get("source_page") or page,
+            "pdf_page": item.get("pdf_page") or page,
+        }
+
+        if source not in sources:
+            sources.append(source)
+
+    return sources
+
+
+def _retrieve_context(question: str):
+    global _collection
+
+    try:
+        collection = get_collection()
+
+        results = collection.query(
+            query_texts=[question],
+            n_results=5,
+        )
+    except KnowledgeBaseNotIndexedError:
+        return {
+            "answer": KNOWLEDGE_BASE_NOT_INDEXED_ANSWER,
+            "revision": "",
+            "sources": [],
+        }
+    except Exception as error:
+        _collection = None
+        logger.warning(
+            "Unable to query Chroma collection '%s' at '%s'. "
+            "Run admin re-index if this persists. Error: %s",
+            COLLECTION_NAME,
+            DATABASE_PATH,
+            error,
+        )
+        return {
+            "answer": KNOWLEDGE_BASE_NOT_INDEXED_ANSWER,
+            "revision": "",
+            "sources": [],
+        }
+
+    documents = results["documents"][0]
+    metadatas = results["metadatas"][0]
+
+    if not documents:
+        return {
+            "answer": "I couldn't find this information in the uploaded AssamWork study materials.",
+            "revision": "",
+            "sources": [],
+        }
+
+    return {
+        "context": "\n\n".join(documents),
+        "sources": _sources_from_metadatas(metadatas),
+    }
+
+
+def _answer_prompt(question: str, context: str):
+    return f"""
+You are AssamWork AI Tutor.
+
+Answer ONLY using the study material below.
+
+If the answer is not found, reply exactly:
+
+I couldn't find this information in the uploaded AssamWork study materials.
+
+Do not add any other text when the answer is not found.
+
+Study Material:
+
+{context}
+
+Question:
+
+{question}
+
+Write in exam-oriented language.
+"""
+
+
+def _structured_prompt(question: str, context: str):
+    return f"""
+{_answer_prompt(question, context)}
+
+Return JSON only with this structure:
+{{
+  "answer": "exam-oriented answer text",
+  "revision": ["3-5 concise revision bullet points"]
+}}
+
+If the answer is not found, return:
+{{
+  "answer": "I couldn't find this information in the uploaded AssamWork study materials.",
+  "revision": []
+}}
+"""
+
+
+def _revision_prompt(question: str, context: str, answer: str):
+    return f"""
+You are AssamWork AI Tutor.
+
+Using only the study material and completed answer below, create 3-5 concise revision bullet points.
+
+If the answer says the information was not found, return an empty revision list.
+
+Study Material:
+
+{context}
+
+Question:
+
+{question}
+
+Completed Answer:
+
+{answer}
+
+Return JSON only with this structure:
+{{
+  "revision": ["concise revision bullet point"]
+}}
+"""
+
+
+def _json_config(schema):
+    return types.GenerateContentConfig(
+        response_mime_type="application/json",
+        response_schema=schema,
+    )
+
+
+def _answer_schema():
+    return {
+        "type": "object",
+        "properties": {
+            "answer": {"type": "string"},
+            "revision": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+        },
+        "required": ["answer", "revision"],
+    }
+
+
+def _revision_schema():
+    return {
+        "type": "object",
+        "properties": {
+            "revision": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+        },
+        "required": ["revision"],
+    }
+
+
+def generate_revision(question: str, context: str, answer: str):
+    response = get_client().models.generate_content(
+        model="gemini-2.5-flash",
+        contents=_revision_prompt(question, context, answer),
+        config=_json_config(_revision_schema()),
+    )
+
+    return _parse_structured_answer(response.text)["revision"]
+
+
+def stream_answer(question: str, stop_event: threading.Event | None = None):
+    rag = _retrieve_context(question)
+
+    if "answer" in rag:
+        yield {
+            "type": "chunk",
+            "text": rag["answer"],
+        }
+        yield {
+            "type": "metadata",
+            "sources": rag.get("sources", []),
+            "revision": rag.get("revision", ""),
+            "confidence": None,
+        }
+        return
+
+    context = rag["context"]
+    sources = rag["sources"]
+    answer_parts = []
+
+    try:
+        stream = get_client().models.generate_content_stream(
+            model="gemini-2.5-flash",
+            contents=_answer_prompt(question, context),
+        )
+
+        for chunk in stream:
+            if stop_event and stop_event.is_set():
+                return
+
+            text = getattr(chunk, "text", "") or ""
+
+            if not text:
+                continue
+
+            answer_parts.append(text)
+            yield {
+                "type": "chunk",
+                "text": text,
+            }
+
+        answer = "".join(answer_parts).strip()
+
+        if not answer:
+            answer = "No answer returned."
+            yield {
+                "type": "chunk",
+                "text": answer,
+            }
+
+        revision = ""
+
+        if not (stop_event and stop_event.is_set()):
+            try:
+                revision = generate_revision(question, context, answer)
+            except Exception as error:
+                logger.warning("Unable to generate revision metadata: %s", error)
+
+        yield {
+            "type": "metadata",
+            "sources": sources,
+            "revision": revision,
+            "confidence": None,
+        }
+    except Exception as error:
+        logger.warning("Unable to stream Gemini answer: %s", error)
+        yield {
+            "type": "error",
+            "message": "Unable to get an answer right now. Please try again.",
+        }
+
+
 def get_client():
     global _client
 
@@ -126,121 +379,20 @@ def get_collection():
 
 
 def ask_question(question: str):
-    global _collection
+    rag = _retrieve_context(question)
 
-    try:
-        collection = get_collection()
-
-        results = collection.query(
-            query_texts=[question],
-            n_results=5,
-        )
-    except KnowledgeBaseNotIndexedError:
-        return {
-            "answer": KNOWLEDGE_BASE_NOT_INDEXED_ANSWER,
-            "revision": "",
-            "sources": [],
-        }
-    except Exception as error:
-        _collection = None
-        logger.warning(
-            "Unable to query Chroma collection '%s' at '%s'. "
-            "Run admin re-index if this persists. Error: %s",
-            COLLECTION_NAME,
-            DATABASE_PATH,
-            error,
-        )
-        return {
-            "answer": KNOWLEDGE_BASE_NOT_INDEXED_ANSWER,
-            "revision": "",
-            "sources": [],
-        }
-
-    documents = results["documents"][0]
-    metadatas = results["metadatas"][0]
-
-    if not documents:
-        return {
-            "answer": "I couldn't find this information in the uploaded AssamWork study materials.",
-            "revision": "",
-            "sources": [],
-        }
-
-    context = "\n\n".join(documents)
-
-    prompt = f"""
-You are AssamWork AI Tutor.
-
-Answer ONLY using the study material below.
-
-If the answer is not found, reply exactly:
-
-I couldn't find this information in the uploaded AssamWork study materials.
-
-Do not add any other text when the answer is not found.
-
-Study Material:
-
-{context}
-
-Question:
-
-{question}
-
-Write in exam-oriented language.
-
-Return JSON only with this structure:
-{{
-  "answer": "exam-oriented answer text",
-  "revision": ["3-5 concise revision bullet points"]
-}}
-
-If the answer is not found, return:
-{{
-  "answer": "I couldn't find this information in the uploaded AssamWork study materials.",
-  "revision": []
-}}
-"""
+    if "answer" in rag:
+        return rag
 
     response = get_client().models.generate_content(
         model="gemini-2.5-flash",
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema={
-                "type": "object",
-                "properties": {
-                    "answer": {"type": "string"},
-                    "revision": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                    },
-                },
-                "required": ["answer", "revision"],
-            },
-        ),
+        contents=_structured_prompt(question, rag["context"]),
+        config=_json_config(_answer_schema()),
     )
     structured_answer = _parse_structured_answer(response.text)
-
-    sources = []
-
-    for item in metadatas:
-        item = item or {}
-        page = _metadata_page(item)
-        source = {
-            "subject": item.get("subject"),
-            "book": item.get("book"),
-            "page": page,
-            "page_number": page,
-            "source_page": item.get("source_page") or page,
-            "pdf_page": item.get("pdf_page") or page,
-        }
-
-        if source not in sources:
-            sources.append(source)
 
     return {
         "answer": structured_answer["answer"],
         "revision": structured_answer["revision"],
-        "sources": sources,
+        "sources": rag["sources"],
     }

@@ -134,6 +134,7 @@ function getMessageParts(message) {
 
 export default function MessageBubble({ message }) {
   const isUser = message.role === "user";
+  const isStreaming = Boolean(message.isStreaming);
   const sources = Array.isArray(message.sources)
     ? message.sources
     : [];
@@ -161,22 +162,43 @@ export default function MessageBubble({ message }) {
         ) : (
           <>
             <article className="assistant-message min-w-0 overflow-x-auto px-0 py-0 text-[15px] leading-7 text-slate-700 sm:text-base">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={markdownComponents}
-              >
-                {answerContent}
-              </ReactMarkdown>
+              {isStreaming && !answerContent ? (
+                <div className="thinking-indicator inline-flex items-center gap-1.5 text-slate-500">
+                  <span>Thinking</span>
+                  <span className="thinking-dot" />
+                  <span className="thinking-dot animation-delay-150" />
+                  <span className="thinking-dot animation-delay-300" />
+                </div>
+              ) : (
+                <>
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={markdownComponents}
+                  >
+                    {answerContent}
+                  </ReactMarkdown>
+                  {isStreaming && (
+                    <span
+                      className="streaming-cursor ml-0.5 inline-block h-5 w-1 translate-y-1 rounded-full bg-slate-700"
+                      aria-hidden="true"
+                    />
+                  )}
+                </>
+              )}
             </article>
 
-            <RevisionCard
-              content={revisionContent}
-              markdownComponents={markdownComponents}
-            />
+            {!isStreaming && (
+              <>
+                <RevisionCard
+                  content={revisionContent}
+                  markdownComponents={markdownComponents}
+                />
 
-            <SourceCard sources={sources} />
+                <SourceCard sources={sources} />
 
-            <MessageActions content={message.content} />
+                <MessageActions content={message.content} />
+              </>
+            )}
           </>
         )}
       </div>

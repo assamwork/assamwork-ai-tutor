@@ -238,6 +238,52 @@ html[data-theme="dark"] body {
   color: #334155;
 }
 
+.streaming-cursor {
+  animation: streaming-cursor-blink 1s steps(2, start) infinite;
+}
+
+.thinking-dot {
+  width: 0.28rem;
+  height: 0.28rem;
+  border-radius: 999px;
+  background: currentColor;
+  animation: thinking-dot-bounce 1s infinite ease-in-out;
+}
+
+.animation-delay-150 {
+  animation-delay: 150ms;
+}
+
+.animation-delay-300 {
+  animation-delay: 300ms;
+}
+
+@keyframes streaming-cursor-blink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+
+  46%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes thinking-dot-bounce {
+  0%,
+  80%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+
+  40% {
+    opacity: 1;
+    transform: translateY(-0.18rem);
+  }
+}
+
 .source-card {
   background:
     linear-gradient(180deg, rgb(255 255 255 / 0.76), rgb(248 250 252 / 0.68));
@@ -358,6 +404,10 @@ html[data-theme="dark"] .chat-input-button:hover {
 
 html[data-theme="dark"] .assistant-message {
   color: #cbd5e1;
+}
+
+html[data-theme="dark"] .streaming-cursor {
+  background: #cbd5e1;
 }
 
 html[data-theme="dark"] .source-card {

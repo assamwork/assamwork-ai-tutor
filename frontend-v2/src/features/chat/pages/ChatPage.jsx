@@ -65,6 +65,8 @@ export default function ChatPage() {
   );
 
   const bottomRef = useRef(null);
+  const messageScrollRef = useRef(null);
+  const shouldAutoScrollRef = useRef(true);
   const [prompt, setPrompt] = useState("");
   const [showStoreRecommendation, setShowStoreRecommendation] =
     useState(true);
@@ -72,22 +74,43 @@ export default function ChatPage() {
     activeChatId && messageLoadingIds[activeChatId]
   );
   const messageCount = activeChat?.messages?.length ?? 0;
+  const lastMessageContent =
+    activeChat?.messages?.[messageCount - 1]?.content ?? "";
+  const hasStreamingAssistant = Boolean(
+    activeChat?.messages?.some(
+      (message) =>
+        message.role === "assistant" && message.isStreaming
+    )
+  );
   const firstAssistantIndex = activeChat?.messages?.findIndex(
     (item) => item.role === "assistant"
   );
 
   useEffect(() => {
+    if (!shouldAutoScrollRef.current) return;
+
     window.requestAnimationFrame(() => {
       bottomRef.current?.scrollIntoView({
         behavior: "smooth",
         block: "end",
       });
     });
-  }, [messageCount, isLoading, loadingChatId]);
+  }, [messageCount, lastMessageContent, isLoading, loadingChatId]);
 
   useEffect(() => {
     setShowStoreRecommendation(true);
+    shouldAutoScrollRef.current = true;
   }, [activeChatId]);
+
+  function handleMessageScroll(event) {
+    const element = event.currentTarget;
+    const distanceFromBottom =
+      element.scrollHeight -
+      element.scrollTop -
+      element.clientHeight;
+
+    shouldAutoScrollRef.current = distanceFromBottom < 120;
+  }
 
   return (
     <div className="chat-page-shell flex h-dvh max-h-dvh min-h-0 w-full min-w-0 flex-col overflow-hidden">
@@ -98,6 +121,8 @@ export default function ChatPage() {
       />
 
       <main
+        ref={messageScrollRef}
+        onScroll={handleMessageScroll}
         className="chat-message-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain scroll-smooth"
         style={{
           WebkitOverflowScrolling: "touch",
@@ -150,7 +175,9 @@ export default function ChatPage() {
                 </div>
               ))}
 
-              {isLoading && loadingChatId === activeChatId && (
+              {isLoading &&
+                loadingChatId === activeChatId &&
+                !hasStreamingAssistant && (
                 <TypingIndicator />
               )}
 

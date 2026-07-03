@@ -1,6 +1,8 @@
 import os
 import threading
 import logging
+import asyncio
+import json
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
@@ -11,17 +13,19 @@ from fastapi import (
     Form,
     Header,
     HTTPException,
+    Request,
     UploadFile,
     status,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import StreamingResponse
 from google.auth import exceptions as google_auth_exceptions
 from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.oauth2 import id_token
 from pydantic import BaseModel
 
-from chat import ask_question
+from chat import ask_question, stream_answer
 from ingest import ingest_library
 from library import (
     LibraryValidationError,
@@ -159,6 +163,103 @@ async def ask(question: Question):
         "revision": result.get("revision", ""),
         "sources": result["sources"],
     }
+
+
+def _sse_event(event: str, data):
+    return (
+        f"event: {event}\n"
+        f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+    )
+
+
+@app.post("/ask/stream")
+async def ask_stream(question: Question, request: Request):
+    async def event_generator():
+        queue = asyncio.Queue()
+        stop_event = threading.Event()
+        loop = asyncio.get_running_loop()
+
+        def producer():
+            def put_item(item):
+                future = asyncio.run_coroutine_threadsafe(
+                    queue.put(item),
+                    loop,
+                )
+                future.result()
+
+            try:
+                for item in stream_answer(question.question, stop_event):
+                    if stop_event.is_set():
+                        break
+
+                    put_item(item)
+            except Exception as error:
+                logger.warning("Streaming producer failed: %s", error)
+                put_item(
+                    {
+                        "type": "error",
+                        "message": (
+                            "Unable to get an answer right now. "
+                            "Please try again."
+                        ),
+                    }
+                )
+            finally:
+                put_item(None)
+
+        thread = threading.Thread(target=producer, daemon=True)
+        thread.start()
+
+        try:
+            yield _sse_event("thinking", {"message": "Thinking..."})
+
+            while True:
+                if await request.is_disconnected():
+                    stop_event.set()
+                    break
+
+                try:
+                    item = await asyncio.wait_for(queue.get(), timeout=0.5)
+                except asyncio.TimeoutError:
+                    continue
+
+                if item is None:
+                    break
+
+                item_type = item.get("type")
+
+                if item_type == "chunk":
+                    yield _sse_event("chunk", {"text": item.get("text", "")})
+                elif item_type == "metadata":
+                    yield _sse_event(
+                        "metadata",
+                        {
+                            "sources": item.get("sources", []),
+                            "revision": item.get("revision", ""),
+                            "confidence": item.get("confidence"),
+                        },
+                    )
+                elif item_type == "error":
+                    yield _sse_event(
+                        "error",
+                        {
+                            "message": item.get(
+                                "message",
+                                "Unable to get an answer right now.",
+                            )
+                        },
+                    )
+        finally:
+            stop_event.set()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/library", dependencies=[Depends(require_admin)])

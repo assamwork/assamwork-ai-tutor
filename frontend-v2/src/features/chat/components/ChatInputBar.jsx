@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import {
   ArrowUp,
   BookOpenCheck,
-  LoaderCircle,
   Mic,
   Paperclip,
   SendHorizontal,
+  Square,
 } from "lucide-react";
 
 export default function ChatInputBar({
@@ -18,6 +18,7 @@ export default function ChatInputBar({
   helperText,
   sendIcon = "send",
   size = "default",
+  onStop,
 }) {
   const noticeTimerRef = useRef(null);
   const [notice, setNotice] = useState("");
@@ -108,13 +109,13 @@ export default function ChatInputBar({
 
           <button
             type="button"
-            onClick={handleSubmit}
-            disabled={isLoading || !value.trim()}
-            aria-label={isLoading ? "Waiting for answer" : "Send message"}
+            onClick={isLoading ? onStop : handleSubmit}
+            disabled={!isLoading && !value.trim()}
+            aria-label={isLoading ? "Stop generating" : "Send message"}
             className={sendClassName}
           >
             {isLoading ? (
-              <LoaderCircle size={sendIconSize} className="animate-spin" />
+              <Square size={13} fill="currentColor" />
             ) : (
               <SendIcon size={sendIconSize} />
             )}
