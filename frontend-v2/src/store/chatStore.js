@@ -31,6 +31,7 @@ function normalizeMessage(message) {
     ...message,
     role: message.role || "assistant",
     content: message.content || "",
+    revision: message.revision || "",
     sources: Array.isArray(message.sources) ? message.sources : [],
     createdAt: toLocalDate(message.createdAt),
   };
@@ -433,6 +434,12 @@ const useChatStore = create((set, get) => ({
       typeof assistantMessage === "string"
         ? assistantMessage
         : assistantMessage.content;
+    const revision =
+      typeof assistantMessage === "string"
+        ? ""
+        : typeof assistantMessage.revision === "string"
+        ? assistantMessage.revision
+        : "";
     const rawSources =
       typeof assistantMessage === "string"
         ? []
@@ -442,12 +449,24 @@ const useChatStore = create((set, get) => ({
     const sources = rawSources.map((source) => ({
       subject: source?.subject ?? null,
       book: source?.book ?? null,
+      bookName: source?.bookName ?? null,
       page:
         source?.page ??
         source?.pageNumber ??
         source?.page_number ??
+        source?.source_page ??
+        source?.pdf_page ??
         source?.pageNo ??
         source?.page_no ??
+        source?.page_index ??
+        null,
+      page_number: source?.page_number ?? source?.pageNumber ?? null,
+      pageNumber: source?.pageNumber ?? source?.page_number ?? null,
+      source_page: source?.source_page ?? null,
+      pdf_page: source?.pdf_page ?? null,
+      page_index:
+        source?.page_index ??
+        source?.pageIndex ??
         null,
     }));
 
@@ -457,6 +476,7 @@ const useChatStore = create((set, get) => ({
       id: crypto.randomUUID(),
       role: "assistant",
       content,
+      revision,
       sources,
       createdAt: new Date().toISOString(),
     };
@@ -481,7 +501,9 @@ const useChatStore = create((set, get) => ({
         chatId,
         "assistant",
         content,
-        sources
+        sources,
+        null,
+        revision
       );
 
       set((state) => ({

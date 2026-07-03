@@ -35,21 +35,27 @@ def _pdf_files():
     )
 
 
-def _extract_text(pdf: Path):
+def _extract_pages(pdf: Path):
     reader = PdfReader(pdf)
     pages = []
 
-    for page in reader.pages:
+    for index, page in enumerate(reader.pages):
         page_text = page.extract_text()
 
         if page_text:
-            pages.append(page_text)
+            pages.append(
+                {
+                    "page": index + 1,
+                    "page_index": index,
+                    "text": page_text,
+                }
+            )
 
-    return "\n".join(pages)
+    return pages
 
 
-def _chunk_id(subject: str, book: str, index: int):
-    return f"{subject}_{Path(book).stem}_{index}"
+def _chunk_id(subject: str, book: str, page: int, index: int):
+    return f"{subject}_{Path(book).stem}_p{page}_{index}"
 
 
 def ingest_library():
@@ -82,29 +88,45 @@ def ingest_library():
         book = pdf.name
 
         try:
-            text = _extract_text(pdf)
-            chunks = splitter.split_text(text)
+            pages = _extract_pages(pdf)
+            chunks = []
+
+            for page in pages:
+                for chunk in splitter.split_text(page["text"]):
+                    chunks.append(
+                        {
+                            "text": chunk,
+                            "page": page["page"],
+                            "page_index": page["page_index"],
+                        }
+                    )
 
             if not chunks:
                 raise ValueError("No extractable text was found.")
 
             ids = [
-                _chunk_id(subject, book, index)
-                for index in range(len(chunks))
+                _chunk_id(subject, book, chunk["page"], index)
+                for index, chunk in enumerate(chunks)
             ]
+            documents = [chunk["text"] for chunk in chunks]
             metadatas = [
                 {
                     "subject": subject,
                     "book": book,
+                    "page": chunk["page"],
+                    "page_number": chunk["page"],
+                    "pdf_page": chunk["page"],
+                    "source_page": chunk["page"],
+                    "page_index": chunk["page_index"],
                 }
-                for _ in chunks
+                for chunk in chunks
             ]
 
             for start in range(0, len(chunks), UPSERT_BATCH_SIZE):
                 end = start + UPSERT_BATCH_SIZE
                 collection.upsert(
                     ids=ids[start:end],
-                    documents=chunks[start:end],
+                    documents=documents[start:end],
                     metadatas=metadatas[start:end],
                 )
 

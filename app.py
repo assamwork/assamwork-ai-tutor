@@ -156,6 +156,7 @@ async def ask(question: Question):
 
     return {
         "answer": result["answer"],
+        "revision": result.get("revision", ""),
         "sources": result["sources"],
     }
 

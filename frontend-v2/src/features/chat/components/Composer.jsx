@@ -75,6 +75,7 @@ export default function Composer({
           content:
             data.answer ??
             "No answer returned.",
+          revision: data.revision ?? "",
           sources: data.sources ?? [],
         },
         targetChatId

@@ -19,18 +19,8 @@ export default function ChatInputBar({
   sendIcon = "send",
   size = "default",
 }) {
-  const textareaRef = useRef(null);
   const noticeTimerRef = useRef(null);
   const [notice, setNotice] = useState("");
-
-  useEffect(() => {
-    const textarea = textareaRef.current;
-
-    if (!textarea) return;
-
-    textarea.style.height = "auto";
-    textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
-  }, [value]);
 
   useEffect(() => {
     return () => {
@@ -64,18 +54,17 @@ export default function ChatInputBar({
 
   const SendIcon = sendIcon === "arrow" ? ArrowUp : SendHorizontal;
   const isCompact = size === "compact";
-  const frameClassName = isCompact
-    ? "chat-input-bar flex min-w-0 items-end gap-1 rounded-[1.35rem] border p-1 shadow-lg transition focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100 sm:gap-2 sm:rounded-3xl sm:p-2"
-    : "chat-input-bar flex min-w-0 items-end gap-1.5 rounded-[1.6rem] border p-1.5 shadow-lg transition focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100 sm:gap-2 sm:rounded-3xl sm:p-2";
+  const frameClassName =
+    "chat-input-bar grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,3fr)_minmax(0,1fr)] items-center gap-1.5 sm:gap-2";
   const controlClassName = isCompact
-    ? "chat-input-button flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border text-slate-500 transition hover:text-slate-700 sm:h-10 sm:w-10 sm:rounded-2xl"
-    : "chat-input-button flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-slate-500 transition hover:text-slate-700 sm:h-11 sm:w-11 sm:rounded-2xl";
+    ? "chat-input-button mx-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-slate-500 transition hover:text-slate-700"
+    : "chat-input-button mx-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full border text-slate-500 transition hover:text-slate-700";
   const sendClassName = isCompact
-    ? "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none sm:h-10 sm:w-10 sm:rounded-2xl"
-    : "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none sm:h-11 sm:w-11 sm:rounded-2xl";
+    ? "flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none"
+    : "flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none";
   const textareaClassName = isCompact
-    ? "max-h-[4.5rem] min-h-9 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1.5 py-1.5 text-[15px] leading-6 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed sm:min-h-10 sm:px-2 sm:py-2"
-    : "max-h-28 min-h-10 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1.5 py-2 text-[15px] leading-6 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed sm:min-h-11 sm:px-2.5 sm:py-2.5";
+    ? "h-10 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-2 text-[15px] leading-6 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed"
+    : "h-10 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-2 text-[15px] leading-6 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed";
   const iconSize = isCompact ? 15 : 17;
   const sendIconSize = isCompact ? 16 : 18;
 
@@ -104,18 +93,33 @@ export default function ChatInputBar({
           <Paperclip size={iconSize} />
         </button>
 
-        <textarea
-          ref={textareaRef}
-          rows={1}
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={isLoading}
-          aria-label={ariaLabel}
-          aria-describedby={helperText ? "chat-input-helper" : undefined}
-          placeholder={placeholder}
-          className={textareaClassName}
-        />
+        <div className="chat-composer-pill flex h-12 min-w-0 items-center gap-1.5 rounded-full border px-3 shadow-lg transition focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100 sm:h-[3.25rem] sm:px-3.5">
+          <textarea
+            rows={1}
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={isLoading}
+            aria-label={ariaLabel}
+            aria-describedby={helperText ? "chat-input-helper" : undefined}
+            placeholder={placeholder}
+            className={textareaClassName}
+          />
+
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={isLoading || !value.trim()}
+            aria-label={isLoading ? "Waiting for answer" : "Send message"}
+            className={sendClassName}
+          >
+            {isLoading ? (
+              <LoaderCircle size={sendIconSize} className="animate-spin" />
+            ) : (
+              <SendIcon size={sendIconSize} />
+            )}
+          </button>
+        </div>
 
         <button
           type="button"
@@ -125,20 +129,6 @@ export default function ChatInputBar({
           className={controlClassName}
         >
           <Mic size={iconSize} />
-        </button>
-
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={isLoading || !value.trim()}
-          aria-label={isLoading ? "Waiting for answer" : "Send message"}
-          className={sendClassName}
-        >
-          {isLoading ? (
-            <LoaderCircle size={sendIconSize} className="animate-spin" />
-          ) : (
-            <SendIcon size={sendIconSize} />
-          )}
         </button>
       </div>
 

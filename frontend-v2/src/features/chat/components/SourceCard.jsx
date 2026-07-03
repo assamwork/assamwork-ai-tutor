@@ -5,19 +5,44 @@ function getSourceBook(source) {
   return source?.book || source?.bookName || "Book not specified";
 }
 
+function normalizePageValue(value, isZeroIndexed = false) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const numericValue = Number(value);
+
+  if (Number.isFinite(numericValue)) {
+    return isZeroIndexed || numericValue === 0
+      ? numericValue + 1
+      : numericValue;
+  }
+
+  return value;
+}
+
 function getSourcePage(source) {
   const page =
     source?.page ??
     source?.pageNumber ??
     source?.page_number ??
+    source?.source_page ??
+    source?.pdf_page ??
     source?.pageNo ??
     source?.page_no;
 
-  if (page === null || page === undefined || page === "") {
+  const normalizedPage =
+    normalizePageValue(page) ??
+    normalizePageValue(
+      source?.page_index ?? source?.pageIndex,
+      true
+    );
+
+  if (normalizedPage === null) {
     return "Page not available";
   }
 
-  return `Page ${page}`;
+  return `Page ${normalizedPage}`;
 }
 
 function getCollapsedSourceLabel(source, remainingCount) {

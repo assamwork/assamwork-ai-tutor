@@ -132,7 +132,8 @@ class ChatRepository {
     role,
     content,
     sources = [],
-    title = null
+    title = null,
+    revision = ""
   ) {
     const messageRef = doc(
       collection(
@@ -150,6 +151,7 @@ class ChatRepository {
     batch.set(messageRef, {
       role,
       content,
+      revision,
       sources,
       createdAt: serverTimestamp(),
     });

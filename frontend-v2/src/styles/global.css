@@ -190,11 +190,15 @@ html[data-theme="dark"] body {
 }
 
 .chat-input-bar {
+  overflow: visible;
+}
+
+.chat-composer-pill {
   background:
-    linear-gradient(180deg, rgb(255 255 255 / 0.88), rgb(255 255 255 / 0.76));
-  border-color: rgb(203 213 225 / 0.72);
+    linear-gradient(180deg, rgb(255 255 255 / 0.9), rgb(255 255 255 / 0.76));
+  border-color: rgb(203 213 225 / 0.76);
   box-shadow:
-    0 18px 44px rgb(15 23 42 / 0.12),
+    0 14px 34px rgb(15 23 42 / 0.11),
     inset 0 1px 0 rgb(255 255 255 / 0.82);
   backdrop-filter: blur(18px) saturate(140%);
   -webkit-backdrop-filter: blur(18px) saturate(140%);
@@ -220,6 +224,38 @@ html[data-theme="dark"] body {
   box-shadow:
     0 12px 32px rgb(15 23 42 / 0.08),
     inset 0 1px 0 rgb(255 255 255 / 0.76);
+}
+
+.revision-card {
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.76), rgb(248 250 252 / 0.68));
+  border-color: rgb(203 213 225 / 0.72);
+  box-shadow:
+    0 12px 32px rgb(15 23 42 / 0.08),
+    inset 0 1px 0 rgb(255 255 255 / 0.76);
+}
+
+.revision-card:hover {
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.86), rgb(248 250 252 / 0.76));
+}
+
+.revision-card-icon {
+  background: rgb(37 99 235 / 0.12);
+  color: #1d4ed8;
+}
+
+.revision-card-title {
+  color: #0f172a;
+}
+
+.revision-card-chevron {
+  color: #64748b;
+}
+
+.revision-card-content {
+  border-color: rgb(226 232 240 / 0.82);
+  color: #334155;
 }
 
 .source-card:hover {
@@ -271,7 +307,7 @@ html[data-theme="dark"] .composer-shell {
   box-shadow: 0 12px 32px rgb(0 0 0 / 0.28);
 }
 
-html[data-theme="dark"] .chat-input-bar {
+html[data-theme="dark"] .chat-composer-pill {
   background:
     linear-gradient(180deg, rgb(15 23 42 / 0.86), rgb(2 6 23 / 0.78));
   border-color: rgb(71 85 105 / 0.76) !important;
@@ -302,6 +338,38 @@ html[data-theme="dark"] .source-card {
   box-shadow:
     0 16px 36px rgb(0 0 0 / 0.32),
     inset 0 1px 0 rgb(148 163 184 / 0.12);
+}
+
+html[data-theme="dark"] .revision-card {
+  background:
+    linear-gradient(180deg, rgb(15 23 42 / 0.8), rgb(2 6 23 / 0.66));
+  border-color: rgb(71 85 105 / 0.72);
+  box-shadow:
+    0 16px 36px rgb(0 0 0 / 0.32),
+    inset 0 1px 0 rgb(148 163 184 / 0.12);
+}
+
+html[data-theme="dark"] .revision-card:hover {
+  background:
+    linear-gradient(180deg, rgb(30 41 59 / 0.78), rgb(15 23 42 / 0.74));
+}
+
+html[data-theme="dark"] .revision-card-icon {
+  background: rgb(37 99 235 / 0.18);
+  color: #93c5fd;
+}
+
+html[data-theme="dark"] .revision-card-title,
+html[data-theme="dark"] .revision-card-content {
+  color: #e2e8f0;
+}
+
+html[data-theme="dark"] .revision-card-chevron {
+  color: #a7b4c7;
+}
+
+html[data-theme="dark"] .revision-card-content {
+  border-color: rgb(71 85 105 / 0.66);
 }
 
 html[data-theme="dark"] .source-card:hover {
@@ -342,7 +410,6 @@ html[data-theme="dark"] .home-heading span:first-child {
 
 html[data-theme="dark"] .home-chip,
 html[data-theme="dark"] .home-material-card,
-html[data-theme="dark"] .chat-input-bar,
 html[data-theme="dark"] .main-menu-button,
 html[data-theme="dark"] .sidebar-panel {
   background-color: rgb(15 23 42 / 0.88) !important;

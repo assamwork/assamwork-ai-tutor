@@ -3,6 +3,7 @@ import remarkGfm from "remark-gfm";
 import { Sparkles } from "lucide-react";
 
 import MessageActions from "./MessageActions";
+import RevisionCard from "./RevisionCard";
 import SourceCard from "./SourceCard";
 
 const markdownComponents = {
@@ -97,11 +98,46 @@ const markdownComponents = {
   },
 };
 
+function splitRevisionContent(content = "") {
+  const revisionHeadingPattern =
+    /(?:^|\n)(?:#{1,6}\s*)?(?:\*\*)?\s*(revision(?:\s+(?:points|notes))?|quick revision|helpful revision|key revision points)\s*(?:\*\*)?\s*:?\s*\n/i;
+  const match = revisionHeadingPattern.exec(content);
+
+  if (!match?.index && match?.index !== 0) {
+    return {
+      answerContent: content,
+      revisionContent: "",
+    };
+  }
+
+  const headingStart = match.index;
+  const revisionStart = headingStart + match[0].length;
+
+  return {
+    answerContent: content.slice(0, headingStart).trim(),
+    revisionContent: content.slice(revisionStart).trim(),
+  };
+}
+
+function getMessageParts(message) {
+  if (typeof message.revision === "string" && message.revision.trim()) {
+    return {
+      answerContent: message.content,
+      revisionContent: message.revision,
+    };
+  }
+
+  // Legacy fallback for messages saved before the API returned revision
+  // separately. New messages should use message.revision.
+  return splitRevisionContent(message.content);
+}
+
 export default function MessageBubble({ message }) {
   const isUser = message.role === "user";
   const sources = Array.isArray(message.sources)
     ? message.sources
     : [];
+  const { answerContent, revisionContent } = getMessageParts(message);
 
   return (
     <div className={`flex max-w-full min-w-0 ${isUser ? "justify-end" : "justify-start"}`}>
@@ -129,9 +165,14 @@ export default function MessageBubble({ message }) {
                 remarkPlugins={[remarkGfm]}
                 components={markdownComponents}
               >
-                {message.content}
+                {answerContent}
               </ReactMarkdown>
             </article>
+
+            <RevisionCard
+              content={revisionContent}
+              markdownComponents={markdownComponents}
+            />
 
             <SourceCard sources={sources} />
 
