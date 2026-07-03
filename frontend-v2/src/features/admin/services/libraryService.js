@@ -52,7 +52,7 @@ export async function getLibrary({ query = "", signal } = {}) {
   if (!response.ok) {
     throw await requestError(
       response,
-      "Unable to load the ebook library. Please try again."
+      "Unable to load the Knowledge Library. Please try again."
     );
   }
 

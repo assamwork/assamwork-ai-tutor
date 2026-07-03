@@ -463,7 +463,7 @@ export default function Sidebar({ isOpen, onClose }) {
               }`}
             >
               <LibraryBig size={20} className="shrink-0" />
-              <span className="truncate">Ebook Library</span>
+              <span className="truncate">Knowledge Library</span>
             </button>
           </>
         )}

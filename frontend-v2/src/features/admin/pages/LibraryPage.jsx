@@ -6,22 +6,17 @@ import {
   useState,
 } from "react";
 import {
-  Activity,
-  AlertTriangle,
   BarChart3,
-  BookOpen,
-  Bot,
-  Boxes,
-  CalendarClock,
   CheckCircle2,
-  Database,
+  ChevronDown,
+  ChevronRight,
   DatabaseZap,
   FileText,
+  Folder,
+  FolderOpen,
   LibraryBig,
-  Layers,
   RefreshCw,
   Search,
-  Server,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -56,6 +51,15 @@ const DEFAULT_CATEGORIES = [
   "Other Relevant Materials",
 ];
 
+const FILTERS = [
+  { id: "all", label: "All Books" },
+  { id: "recent_uploaded", label: "Recently Uploaded" },
+  { id: "recent_used", label: "Recently Used" },
+  { id: "needs_reindex", label: "Needs Re-index" },
+  { id: "duplicates", label: "Duplicate PDFs" },
+  { id: "failed", label: "Failed Indexing" },
+];
+
 function formatDate(value) {
   if (!value) return "—";
 
@@ -68,6 +72,23 @@ function formatDate(value) {
     month: "short",
     year: "numeric",
   }).format(date);
+}
+
+function formatRelativeDate(value) {
+  if (!value) return "Never";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "Never";
+
+  const diffMs = Date.now() - date.getTime();
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffDays <= 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 30) return `${diffDays} days ago`;
+
+  return formatDate(value);
 }
 
 function formatNumber(value) {
@@ -83,14 +104,6 @@ function formatBytes(value) {
   if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
 
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function healthValue(value) {
-  if (value === null || value === undefined || value === "") return "—";
-  if (typeof value === "number") return value.toLocaleString("en-IN");
-  if (Array.isArray(value)) return value.length.toLocaleString("en-IN");
-
-  return String(value);
 }
 
 function statusStyles(status) {
@@ -109,40 +122,41 @@ function statusStyles(status) {
 }
 
 function statusLabel(status) {
-  if (status === "uploaded_pending_ingestion") {
-    return "Pending ingestion";
-  }
+  if (status === "uploaded_pending_ingestion") return "Pending";
 
   return status || "Unknown";
 }
 
-function healthStyles(label, value) {
-  const normalized = String(value || "").toLowerCase();
+function bookKey(book) {
+  return `${book.subject || "Unknown subject"}/${book.book || "Unknown book"}`;
+}
 
-  if (
-    ["Backend", "RAG", "ChromaDB"].includes(label) &&
-    ["online", "ready", "healthy"].includes(normalized)
-  ) {
-    return {
-      card: "border-emerald-200 bg-emerald-50",
-      icon: "text-emerald-600",
-      value: "text-emerald-800",
-    };
-  }
+function hasIndexingError(book) {
+  return Array.isArray(book.health?.indexingErrors) &&
+    book.health.indexingErrors.length > 0;
+}
 
-  if (normalized === "unknown" || normalized === "not_ready") {
-    return {
-      card: "border-amber-200 bg-amber-50",
-      icon: "text-amber-600",
-      value: "text-amber-800",
-    };
-  }
+function needsReindex(book) {
+  if (hasIndexingError(book)) return true;
+  if (book.status !== "Indexed") return true;
+  if (!book.lastIndexedAt && !book.indexedAt) return true;
 
-  return {
-    card: "border-slate-200 bg-slate-50",
-    icon: "text-slate-500",
-    value: "text-slate-800",
-  };
+  const indexedAt = new Date(book.lastIndexedAt || book.indexedAt).getTime();
+  const modifiedAt = new Date(book.modifiedAt).getTime();
+
+  return Number.isFinite(indexedAt) &&
+    Number.isFinite(modifiedAt) &&
+    modifiedAt > indexedAt;
+}
+
+function isRecent(value) {
+  if (!value) return false;
+
+  const timestamp = new Date(value).getTime();
+
+  if (!Number.isFinite(timestamp)) return false;
+
+  return Date.now() - timestamp <= 7 * 86400000;
 }
 
 export default function LibraryPage() {
@@ -164,7 +178,10 @@ export default function LibraryPage() {
   const [indexing, setIndexing] = useState(false);
   const [indexMessage, setIndexMessage] = useState(null);
   const [systemStatus, setSystemStatus] = useState(null);
-  const [systemStatusError, setSystemStatusError] = useState("");
+  const [expandedSubjects, setExpandedSubjects] = useState(() => new Set());
+  const [expandedBookKey, setExpandedBookKey] = useState("");
+  const [subjectQueries, setSubjectQueries] = useState({});
+  const [activeFilter, setActiveFilter] = useState("all");
   const pendingUploadRef = useRef(false);
 
   const retry = useCallback(() => {
@@ -183,7 +200,7 @@ export default function LibraryPage() {
     if (!selectedFile) {
       setUploadMessage({
         type: "error",
-        text: "Select a PDF ebook to upload.",
+        text: "Select a PDF file to upload.",
       });
       return;
     }
@@ -219,17 +236,18 @@ export default function LibraryPage() {
         type: "success",
         text:
           uploadedBook.message ||
-          "PDF uploaded but not indexed yet. Click Make Available to AI.",
-      });
-      setIndexMessage({
-        type: "pending",
-        text: "PDF uploaded but not indexed yet.",
+          "PDF uploaded. Re-index changed books to make it searchable.",
       });
       pendingUploadRef.current = true;
       setSelectedFile(null);
       setFileInputKey((value) => value + 1);
       setCustomSubject("");
       setSelectedSubject(DEFAULT_CATEGORIES[0]);
+      setExpandedSubjects((current) => {
+        const next = new Set(current);
+        next.add(subject);
+        return next;
+      });
       retry();
     } catch (uploadError) {
       setUploadMessage({
@@ -243,13 +261,13 @@ export default function LibraryPage() {
 
   async function handleDelete(book) {
     const confirmed = window.confirm(
-      "Delete this ebook from the knowledge library? This action cannot be undone."
+      "Delete this PDF from the knowledge library? This action cannot be undone."
     );
 
     if (!confirmed) return;
 
-    const bookKey = `${book.subject}/${book.book}`;
-    setDeletingBook(bookKey);
+    const key = bookKey(book);
+    setDeletingBook(key);
     setDeleteMessage(null);
 
     try {
@@ -259,26 +277,21 @@ export default function LibraryPage() {
       });
 
       setBooks((currentBooks) =>
-        currentBooks.filter(
-          (currentBook) =>
-            !(
-              currentBook.subject === book.subject &&
-              currentBook.book === book.book
-            )
-        )
+        currentBooks.filter((currentBook) => bookKey(currentBook) !== key)
       );
+      setExpandedBookKey((current) => (current === key ? "" : current));
       setDeleteMessage({
         type: "success",
         text:
           result.vectorCleanup === "pending"
-            ? "Ebook deleted. Vector cleanup is pending."
-            : "Ebook deleted.",
+            ? "PDF deleted. Vector cleanup is pending."
+            : "PDF deleted.",
       });
       retry();
     } catch (deleteError) {
       setDeleteMessage({
         type: "error",
-        text: deleteError.message || "The ebook could not be deleted.",
+        text: deleteError.message || "The PDF could not be deleted.",
       });
     } finally {
       setDeletingBook("");
@@ -307,11 +320,11 @@ export default function LibraryPage() {
         type: "success",
         text:
           result.booksProcessed > 0
-            ? "Library indexed successfully. New PDFs are now available to AssamWork AI."
+            ? "Knowledge index updated."
             : result.message,
-        details: `${result.booksProcessed ?? 0} book(s), ${
-          result.chunksAdded ?? 0
-        } chunk(s) indexed, ${result.booksSkipped ?? 0} unchanged skipped.`,
+        details: `${result.booksProcessed ?? 0} processed, ${
+          result.booksSkipped ?? 0
+        } unchanged skipped, ${result.chunksAdded ?? 0} chunks indexed.`,
       });
       pendingUploadRef.current = false;
       retry();
@@ -326,12 +339,27 @@ export default function LibraryPage() {
               "Re-index failed. Check backend logs and try again.",
       });
     } finally {
-      if (!jobStillRunning) {
-        setIndexing(false);
-      } else {
-        setIndexing(true);
-      }
+      setIndexing(jobStillRunning);
     }
+  }
+
+  function toggleSubject(subject) {
+    setExpandedSubjects((current) => {
+      const next = new Set(current);
+
+      if (next.has(subject)) {
+        next.delete(subject);
+      } else {
+        next.add(subject);
+      }
+
+      return next;
+    });
+  }
+
+  function toggleBook(book) {
+    const key = bookKey(book);
+    setExpandedBookKey((current) => (current === key ? "" : key));
   }
 
   useEffect(() => {
@@ -362,20 +390,20 @@ export default function LibraryPage() {
         if (state.running) {
           setIndexMessage({
             type: "running",
-            text: "Indexing PDFs…",
+            text: "Indexing PDFs...",
           });
         } else if (state.lastResult && !pendingUploadRef.current) {
           setIndexMessage({
             type: state.lastResult.success ? "success" : "error",
             text: state.lastResult.success
-              ? "Library indexed successfully."
+              ? "Knowledge index updated."
               : "Re-index failed. Check details below.",
             details: state.lastResult.success
-              ? `${state.lastResult.booksProcessed ?? 0} book(s), ${
-                  state.lastResult.chunksAdded ?? 0
-                } chunk(s) indexed, ${
+              ? `${state.lastResult.booksProcessed ?? 0} processed, ${
                   state.lastResult.booksSkipped ?? 0
-                } unchanged skipped.`
+                } unchanged skipped, ${
+                  state.lastResult.chunksAdded ?? 0
+                } chunks indexed.`
               : state.lastResult.errors?.[0]?.error,
           });
         }
@@ -383,9 +411,6 @@ export default function LibraryPage() {
 
       if (systemResult.status === "fulfilled") {
         setSystemStatus(systemResult.value);
-        setSystemStatusError("");
-      } else if (systemResult.reason?.name !== "AbortError") {
-        setSystemStatusError("System status is unavailable.");
       }
     }
 
@@ -415,7 +440,7 @@ export default function LibraryPage() {
       } catch (loadError) {
         if (loadError.name !== "AbortError") {
           setError(
-            "The ebook library could not be loaded. Check the backend and try again."
+            "The knowledge library could not be loaded. Check the backend and try again."
           );
         }
       } finally {
@@ -430,11 +455,51 @@ export default function LibraryPage() {
     return () => controller.abort();
   }, [reloadKey, query]);
 
-  const filteredBooks = useMemo(() => {
-    return books;
-  }, [books, query]);
+  const duplicateHashes = useMemo(() => {
+    const counts = books.reduce((result, book) => {
+      if (book.fileHash) {
+        result[book.fileHash] = (result[book.fileHash] || 0) + 1;
+      }
 
-  const groups = useMemo(() => {
+      return result;
+    }, {});
+
+    return new Set(
+      Object.entries(counts)
+        .filter(([, count]) => count > 1)
+        .map(([hash]) => hash)
+    );
+  }, [books]);
+
+  const filteredBooks = useMemo(() => {
+    const sorted = [...books].sort((a, b) =>
+      (a.book || "").localeCompare(b.book || "")
+    );
+
+    if (activeFilter === "recent_uploaded") {
+      return sorted.filter((book) => isRecent(book.uploadedAt));
+    }
+
+    if (activeFilter === "recent_used") {
+      return sorted.filter((book) => isRecent(book.lastUsedAt));
+    }
+
+    if (activeFilter === "needs_reindex") {
+      return sorted.filter(needsReindex);
+    }
+
+    if (activeFilter === "duplicates") {
+      return sorted.filter((book) => duplicateHashes.has(book.fileHash));
+    }
+
+    if (activeFilter === "failed") {
+      return sorted.filter(hasIndexingError);
+    }
+
+    return sorted;
+  }, [activeFilter, books, duplicateHashes]);
+
+  const subjectGroups = useMemo(() => {
     return filteredBooks.reduce((result, book) => {
       const subject = book.subject || "Unknown subject";
 
@@ -447,121 +512,83 @@ export default function LibraryPage() {
     }, {});
   }, [filteredBooks]);
 
+  const subjects = useMemo(
+    () => Object.keys(subjectGroups).sort((a, b) => a.localeCompare(b)),
+    [subjectGroups]
+  );
+
   const statistics = useMemo(() => {
-    const subjects = new Set(
-      books.map((book) => book.subject || "Unknown subject")
-    );
-    const knownChunks = books
-      .filter((book) => typeof book.chunks === "number")
-      .reduce((total, book) => total + book.chunks, 0);
-    const knownPages = books
-      .filter((book) => typeof book.pageCount === "number")
-      .reduce((total, book) => total + book.pageCount, 0);
-    const questionsAnswered = books.reduce(
-      (total, book) => total + (Number(book.questionsAnswered) || 0),
+    const totalChunks = books.reduce(
+      (total, book) => total + (Number(book.chunks) || 0),
       0
     );
-    const health = books.reduce(
-      (result, book) => {
-        const bookHealth = book.health || {};
-        const indexingErrors = Array.isArray(bookHealth.indexingErrors)
-          ? bookHealth.indexingErrors.length
-          : 0;
-
-        result.totalChunks += Number(bookHealth.totalChunks) || 0;
-        result.totalChunkSize +=
-          (Number(bookHealth.averageChunkSize) || 0) *
-          (Number(bookHealth.totalChunks) || 0);
-        result.missingPageMetadata +=
-          Number(bookHealth.missingPageMetadata) || 0;
-        result.duplicateChunks += Number(bookHealth.duplicateChunks) || 0;
-        result.indexingErrors += indexingErrors;
-        return result;
-      },
-      {
-        totalChunks: 0,
-        totalChunkSize: 0,
-        missingPageMetadata: 0,
-        duplicateChunks: 0,
-        indexingErrors: 0,
-      }
+    const storage = books.reduce(
+      (total, book) => total + (Number(book.fileSize) || 0),
+      0
     );
-    const hasKnownChunks = books.some(
-      (book) => typeof book.chunks === "number"
-    );
-    const timestamps = books
-      .filter((book) => book.uploadedAt)
-      .map((book) => new Date(book.uploadedAt).getTime())
-      .filter(Number.isFinite);
+    const indexed = books.filter((book) => book.status === "Indexed").length;
+    const changed = books.filter(needsReindex).length;
+    const failed = books.filter(hasIndexingError).length;
+    const duplicatePdfCount = books.filter((book) =>
+      duplicateHashes.has(book.fileHash)
+    ).length;
+    const recentlyUploaded = books.filter((book) =>
+      isRecent(book.uploadedAt)
+    ).length;
+    const recentlyUsed = books.filter((book) =>
+      isRecent(book.lastUsedAt)
+    ).length;
 
     return {
-      subjects: subjects.size,
       books: books.length,
-      chunks: hasKnownChunks
-        ? knownChunks.toLocaleString("en-IN")
-        : "—",
-      pages: knownPages > 0 ? knownPages.toLocaleString("en-IN") : "—",
-      questionsAnswered: questionsAnswered.toLocaleString("en-IN"),
-      updated:
-        timestamps.length > 0
-          ? formatDate(Math.max(...timestamps))
-          : "—",
-      health: {
-        ...health,
-        averageChunkSize:
-          health.totalChunks > 0
-            ? Math.round(health.totalChunkSize / health.totalChunks)
-            : 0,
-      },
+      chunks: totalChunks,
+      storage,
+      indexed,
+      changed,
+      failed,
+      duplicatePdfCount,
+      recentlyUploaded,
+      recentlyUsed,
     };
-  }, [books]);
+  }, [books, duplicateHashes]);
 
-  const summaryCards = [
-    {
-      label: "Total Subjects",
-      value: statistics.subjects,
-      icon: Boxes,
-      color: "bg-blue-50 text-blue-600",
-    },
-    {
-      label: "Total Books",
-      value: statistics.books,
-      icon: BookOpen,
-      color: "bg-indigo-50 text-indigo-600",
-    },
-    {
-      label: "Indexed Chunks",
-      value: statistics.chunks,
-      icon: FileText,
-      color: "bg-violet-50 text-violet-600",
-    },
-    {
-      label: "PDF Pages",
-      value: statistics.pages,
-      icon: Layers,
-      color: "bg-emerald-50 text-emerald-600",
-    },
-    {
-      label: "Questions Answered",
-      value: statistics.questionsAnswered,
-      icon: BarChart3,
-      color: "bg-emerald-50 text-emerald-600",
-    },
+  const filterCounts = useMemo(
+    () => ({
+      all: books.length,
+      recent_uploaded: books.filter((book) => isRecent(book.uploadedAt)).length,
+      recent_used: books.filter((book) => isRecent(book.lastUsedAt)).length,
+      needs_reindex: books.filter(needsReindex).length,
+      duplicates: books.filter((book) => duplicateHashes.has(book.fileHash)).length,
+      failed: books.filter(hasIndexingError).length,
+    }),
+    [books, duplicateHashes]
+  );
+
+  const summaryItems = [
+    ["Books", formatNumber(statistics.books)],
+    ["Chunks", formatNumber(statistics.chunks)],
+    ["Storage", formatBytes(statistics.storage)],
+    ["Indexed", formatNumber(statistics.indexed)],
+    ["Changed", formatNumber(statistics.changed)],
+    ["Failed", formatNumber(statistics.failed)],
+    ["Duplicates", formatNumber(statistics.duplicatePdfCount)],
+    ["Recently Uploaded", formatNumber(statistics.recentlyUploaded)],
+    ["Recently Used", formatNumber(statistics.recentlyUsed)],
   ];
 
   return (
     <div className="h-full overflow-y-auto bg-slate-50">
-      <div className="mx-auto max-w-7xl px-4 pb-10 pt-20 sm:px-6 lg:px-8 lg:pt-8">
-        <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+      <div className="mx-auto max-w-7xl px-4 pb-8 pt-20 sm:px-6 lg:px-8 lg:pt-8">
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>
             <p className="text-sm font-semibold text-blue-600">
-              Admin · Ebook Library
+              Admin · Knowledge Library
             </p>
             <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">
-              Knowledge Library
+              Knowledge Explorer
             </h1>
             <p className="mt-2 text-sm text-slate-500">
-              Manage the ebooks used by AssamWork AI.
+              Manage PDFs by subject, search indexed content, and inspect book health.
             </p>
           </div>
 
@@ -569,261 +596,124 @@ export default function LibraryPage() {
             type="button"
             onClick={retry}
             disabled={loading}
-            className="inline-flex items-center gap-2 self-start rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center gap-2 self-start rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <RefreshCw
-              size={16}
+              size={15}
               className={loading ? "animate-spin text-blue-600" : "text-blue-600"}
             />
-            Refresh library
+            Refresh
           </button>
         </div>
 
-        <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {summaryCards.map(({ label, value, icon: Icon, color }) => (
-            <article
-              key={label}
-              className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
-            >
-              <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${color}`}>
-                <Icon size={19} />
-              </div>
-              <p className="mt-4 break-words text-xl font-bold text-slate-950 sm:text-2xl">
-                {loading ? "—" : value}
-              </p>
-              <p className="mt-1 text-xs text-slate-500">{label}</p>
-            </article>
-          ))}
-        </div>
-
-        <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-                <Activity size={21} />
-              </div>
-              <div>
-                <h2 className="font-bold text-slate-950">System Health</h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  Live status of the AssamWork AI knowledge system.
+        <section className="mt-5 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-9">
+            {summaryItems.map(([label, value]) => (
+              <div key={label} className="rounded-lg bg-slate-50 px-3 py-2">
+                <p className="truncate text-sm font-bold text-slate-950" title={value}>
+                  {value}
                 </p>
-              </div>
-            </div>
-            {systemStatusError && (
-              <span className="text-xs font-semibold text-amber-700">
-                {systemStatusError}
-              </span>
-            )}
-          </div>
-
-          <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-            {[
-              {
-                label: "Backend",
-                value: systemStatus?.backend || "unknown",
-                icon: Server,
-              },
-              {
-                label: "RAG",
-                value: systemStatus?.rag || "unknown",
-                icon: Bot,
-              },
-              {
-                label: "ChromaDB",
-                value: systemStatus?.chroma || "unknown",
-                icon: Database,
-              },
-              {
-                label: "Books",
-                value: systemStatus?.libraryBooks ?? "—",
-                icon: BookOpen,
-              },
-              {
-                label: "Chunks",
-                value:
-                  typeof systemStatus?.libraryChunks === "number"
-                    ? systemStatus.libraryChunks.toLocaleString("en-IN")
-                    : "—",
-                icon: FileText,
-              },
-              {
-                label: "Last indexed",
-                value: formatDate(systemStatus?.lastIndexed),
-                icon: CalendarClock,
-              },
-            ].map(({ label, value, icon: Icon }) => {
-              const tone = healthStyles(label, value);
-
-              return (
-                <div
-                  key={label}
-                  className={`min-w-0 rounded-xl border p-3 ${tone.card}`}
-                >
-                  <Icon size={16} className={tone.icon} />
-                  <p
-                    className={`mt-3 truncate text-sm font-bold capitalize ${tone.value}`}
-                    title={String(value)}
-                  >
-                    {String(value).replace("_", " ")}
-                  </p>
-                  <p className="mt-1 text-[11px] text-slate-500">{label}</p>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-                <AlertTriangle size={21} />
-              </div>
-              <div>
-                <h2 className="font-bold text-slate-950">Chunk Health</h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  Index quality signals measured from stored Chroma chunks.
+                <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                  {label}
                 </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-            {[
-              {
-                label: "Total chunks",
-                value: statistics.health.totalChunks,
-              },
-              {
-                label: "Avg chunk size",
-                value:
-                  statistics.health.averageChunkSize > 0
-                    ? `${statistics.health.averageChunkSize} chars`
-                    : "—",
-              },
-              {
-                label: "Missing embeddings",
-                value: "Not measured",
-              },
-              {
-                label: "Duplicate chunks",
-                value: statistics.health.duplicateChunks,
-              },
-              {
-                label: "Indexing errors",
-                value: statistics.health.indexingErrors,
-              },
-              {
-                label: "Missing pages",
-                value: statistics.health.missingPageMetadata,
-              },
-            ].map(({ label, value }) => (
-              <div key={label} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <p className="text-sm font-bold text-slate-900">
-                  {healthValue(value)}
-                </p>
-                <p className="mt-1 text-[11px] text-slate-500">{label}</p>
               </div>
             ))}
           </div>
         </section>
 
-        <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-          <div className="border-b border-slate-200 pb-5">
-            <h2 className="font-bold text-slate-950">Knowledge Workflow</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Complete these three steps to add study material to AssamWork AI.
-            </p>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              {[
-                "Upload PDF",
-                "Re-index Library",
-                "Ask AI from uploaded ebook",
-              ].map((step, index) => (
-                <div
-                  key={step}
-                  className="flex items-center gap-3 rounded-xl bg-slate-50 p-3"
-                >
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">
-                    {index + 1}
-                  </span>
-                  <span className="text-xs font-semibold text-slate-700">
-                    {step}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-5 flex items-start gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-              <Upload size={21} />
-            </div>
-            <div>
-              <h2 className="font-bold text-slate-950">Upload Ebook</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-500">
-                Add a PDF to the knowledge folder, then re-index the library
-                to make it available to AI answers.
-              </p>
-            </div>
-          </div>
-
-          <form
-            onSubmit={handleUpload}
-            className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.65fr)_auto] lg:items-end"
-          >
-            <label className="block min-w-0">
-              <span className="text-xs font-bold text-slate-700">
-                PDF ebook
-              </span>
-              <input
-                key={fileInputKey}
-                type="file"
-                accept="application/pdf,.pdf"
-                onChange={(event) =>
-                  setSelectedFile(event.target.files?.[0] || null)
-                }
-                disabled={uploading || indexing}
-                className="mt-2 block w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-600 file:px-3 file:py-2 file:text-xs file:font-bold file:text-white hover:file:bg-blue-700 disabled:opacity-60"
-              />
-            </label>
-
-            <label className="block min-w-0">
-              <span className="text-xs font-bold text-slate-700">
-                Subject/category
-              </span>
-              <select
-                value={selectedSubject}
-                onChange={(event) => setSelectedSubject(event.target.value)}
-                disabled={uploading || indexing}
-                className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-blue-500 disabled:opacity-60"
-              >
-                {DEFAULT_CATEGORIES.map((category) => (
-                  <option key={category} value={category}>
-                    {category}
-                  </option>
-                ))}
-                <option value="__custom__">Create custom category…</option>
-              </select>
-            </label>
-
-            <button
-              type="submit"
-              disabled={uploading || indexing}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+        <section className="mt-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end">
+            <form
+              onSubmit={handleUpload}
+              className="grid min-w-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_220px_160px]"
             >
-              {uploading ? (
-                <RefreshCw size={17} className="animate-spin" />
-              ) : (
-                <Upload size={17} />
-              )}
-              {uploading ? "Uploading…" : "Upload PDF"}
-            </button>
-          </form>
+              <label className="block min-w-0">
+                <span className="text-xs font-bold text-slate-700">Upload PDF</span>
+                <input
+                  key={fileInputKey}
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  onChange={(event) =>
+                    setSelectedFile(event.target.files?.[0] || null)
+                  }
+                  disabled={uploading || indexing}
+                  className="mt-2 block w-full min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-blue-600 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-white hover:file:bg-blue-700 disabled:opacity-60"
+                />
+              </label>
+
+              <label className="block min-w-0">
+                <span className="text-xs font-bold text-slate-700">Subject</span>
+                <select
+                  value={selectedSubject}
+                  onChange={(event) => setSelectedSubject(event.target.value)}
+                  disabled={uploading || indexing}
+                  className="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-blue-500 disabled:opacity-60"
+                >
+                  {DEFAULT_CATEGORIES.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                  <option value="__custom__">Create custom category...</option>
+                </select>
+              </label>
+
+              <button
+                type="submit"
+                disabled={uploading || indexing}
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 lg:mt-6"
+              >
+                {uploading ? (
+                  <RefreshCw size={16} className="animate-spin" />
+                ) : (
+                  <Upload size={16} />
+                )}
+                {uploading ? "Uploading..." : "Upload PDF"}
+              </button>
+            </form>
+
+            <div className="min-w-0 xl:w-[420px]">
+              <p className="text-xs font-bold text-slate-700">Knowledge Actions</p>
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => handleReindex({ force: false })}
+                  disabled={indexing || uploading}
+                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-violet-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {indexing ? (
+                    <RefreshCw size={15} className="animate-spin" />
+                  ) : (
+                    <DatabaseZap size={15} />
+                  )}
+                  Re-index Changed
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleReindex({ force: true })}
+                  disabled={indexing || uploading}
+                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <RefreshCw size={15} />
+                  Re-index All
+                </button>
+                <button
+                  type="button"
+                  disabled
+                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-400"
+                >
+                  <BarChart3 size={15} />
+                  Analytics
+                </button>
+                <span className="flex min-h-10 items-center justify-center rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+                  {systemStatus?.rag || "status unknown"}
+                </span>
+              </div>
+            </div>
+          </div>
 
           {selectedSubject === "__custom__" && (
-            <label className="mt-4 block max-w-xl">
+            <label className="mt-3 block max-w-md">
               <span className="text-xs font-bold text-slate-700">
                 Custom category name
               </span>
@@ -834,299 +724,349 @@ export default function LibraryPage() {
                 placeholder="Enter a subject/category"
                 maxLength={80}
                 disabled={uploading || indexing}
-                className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+                className="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
               />
             </label>
           )}
 
-          {uploadMessage && (
-            <div
-              className={`mt-4 flex items-start gap-2 rounded-xl border px-4 py-3 text-sm ${
-                uploadMessage.type === "success"
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                  : "border-red-200 bg-red-50 text-red-700"
-              }`}
-            >
-              {uploadMessage.type === "success" && (
-                <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
+          {(uploadMessage || indexMessage || deleteMessage) && (
+            <div className="mt-3 grid gap-2 lg:grid-cols-3">
+              {uploadMessage && (
+                <Message tone={uploadMessage.type}>{uploadMessage.text}</Message>
               )}
-              <p>{uploadMessage.text}</p>
-            </div>
-          )}
-
-          <div className="mt-5 flex flex-col justify-between gap-4 border-t border-slate-200 pt-5 sm:flex-row sm:items-center">
-            <div className="flex min-w-0 items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
-                <DatabaseZap size={19} />
-              </div>
-                <div>
-                  <p className="text-sm font-bold text-slate-800">
-                    Re-index changed books
-                  </p>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">
-                    Smart indexing skips unchanged PDFs and keeps full rebuild
-                    available for manual maintenance.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <button
-                  type="button"
-                  onClick={() => handleReindex({ force: false })}
-                  disabled={indexing || uploading}
-                  className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {indexing ? (
-                    <RefreshCw size={17} className="animate-spin" />
-                  ) : (
-                    <DatabaseZap size={17} />
+              {indexMessage && (
+                <Message tone={indexMessage.type}>
+                  <span className="font-semibold">{indexMessage.text}</span>
+                  {indexMessage.details && (
+                    <span className="mt-1 block text-xs">{indexMessage.details}</span>
                   )}
-                  {indexing ? "Indexing PDFs…" : "Re-index changed books"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleReindex({ force: true })}
-                  disabled={indexing || uploading}
-                  className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <RefreshCw size={17} />
-                  Re-index all
-                </button>
-              </div>
-            </div>
-
-          {indexMessage && (
-            <div
-              className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
-                indexMessage.type === "success"
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                  : indexMessage.type === "running" ||
-                    indexMessage.type === "pending"
-                  ? "border-violet-200 bg-violet-50 text-violet-800"
-                  : "border-red-200 bg-red-50 text-red-700"
-              }`}
-            >
-              <p className="font-semibold">{indexMessage.text}</p>
-              {indexMessage.details && (
-                <p className="mt-1 text-xs">{indexMessage.details}</p>
+                </Message>
+              )}
+              {deleteMessage && (
+                <Message tone={deleteMessage.type}>{deleteMessage.text}</Message>
               )}
             </div>
           )}
         </section>
 
-        {deleteMessage && (
-          <div
-            role="status"
-            className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
-              deleteMessage.type === "success"
-                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                : "border-red-200 bg-red-50 text-red-700"
-            }`}
-          >
-            {deleteMessage.text}
-          </div>
-        )}
+        <section className="mt-5 grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
+          <aside className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm lg:sticky lg:top-4 lg:self-start">
+            <p className="px-2 text-xs font-bold uppercase tracking-wide text-slate-400">
+              Filters
+            </p>
+            <div className="mt-2 space-y-1">
+              {FILTERS.map((filter) => (
+                <button
+                  key={filter.id}
+                  type="button"
+                  onClick={() => setActiveFilter(filter.id)}
+                  className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs font-semibold transition ${
+                    activeFilter === filter.id
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  <span>{filter.label}</span>
+                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] text-slate-500">
+                    {formatNumber(filterCounts[filter.id] || 0)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </aside>
 
-        <section className="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 p-4 sm:p-5">
-            <label className="flex max-w-xl items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 focus-within:border-blue-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-blue-50">
-              <Search size={18} className="shrink-0 text-slate-400" />
+          <div className="min-w-0 rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-200 p-3">
+              <label className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 focus-within:border-blue-500 focus-within:bg-white">
+                <Search size={17} className="shrink-0 text-slate-400" />
                 <input
                   type="search"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search subject, filename, or PDF content"
-                  aria-label="Search ebook library"
-                  className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none"
+                  placeholder="Search subject, filename, book title, or indexed content"
+                  aria-label="Search knowledge library"
+                  className="min-w-0 flex-1 bg-transparent py-2.5 text-sm outline-none"
                 />
-            </label>
+              </label>
+            </div>
+
+            {loading ? (
+              <div className="space-y-2 p-3" aria-label="Loading library">
+                {[0, 1, 2, 3, 4, 5].map((item) => (
+                  <div
+                    key={item}
+                    className="h-11 animate-pulse rounded-lg bg-slate-100"
+                  />
+                ))}
+              </div>
+            ) : error ? (
+              <EmptyState
+                icon={RefreshCw}
+                title="Unable to load the library"
+                text={error}
+                actionLabel="Retry"
+                onAction={retry}
+              />
+            ) : books.length === 0 ? (
+              <EmptyState
+                icon={LibraryBig}
+                title="No PDFs have been added yet"
+                text="Use the upload action above to add study material."
+              />
+            ) : subjects.length === 0 ? (
+              <EmptyState
+                icon={Search}
+                title="No matching PDFs"
+                text="Try another subject, filename, or content phrase."
+              />
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {subjects.map((subject) => {
+                  const subjectBooks = subjectGroups[subject] || [];
+                  const expanded = expandedSubjects.has(subject);
+                  const forceExpanded = Boolean(query.trim());
+                  const visible = expanded || forceExpanded;
+                  const subjectQuery = subjectQueries[subject] || "";
+                  const visibleBooks = subjectQuery
+                    ? subjectBooks.filter((book) =>
+                        `${book.book || ""} ${book.filename || ""}`
+                          .toLowerCase()
+                          .includes(subjectQuery.toLowerCase())
+                      )
+                    : subjectBooks;
+
+                  return (
+                    <div key={subject}>
+                      <button
+                        type="button"
+                        onClick={() => toggleSubject(subject)}
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition hover:bg-slate-50"
+                      >
+                        {expanded ? (
+                          <ChevronDown size={16} className="text-slate-400" />
+                        ) : (
+                          <ChevronRight size={16} className="text-slate-400" />
+                        )}
+                        {visible ? (
+                          <FolderOpen size={17} className="text-blue-600" />
+                        ) : (
+                          <Folder size={17} className="text-blue-600" />
+                        )}
+                        <span className="min-w-0 flex-1 truncate text-sm font-bold text-slate-800">
+                          {subject}
+                        </span>
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-500">
+                          {subjectBooks.length}
+                        </span>
+                      </button>
+
+                      {visible && (
+                        <div className="border-t border-slate-100 bg-slate-50/70 px-3 pb-3">
+                          <div className="py-2">
+                            <label className="flex max-w-md items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5">
+                              <Search size={14} className="text-slate-400" />
+                              <input
+                                type="search"
+                                value={subjectQuery}
+                                onChange={(event) =>
+                                  setSubjectQueries((current) => ({
+                                    ...current,
+                                    [subject]: event.target.value,
+                                  }))
+                                }
+                                placeholder={`Search in ${subject}`}
+                                className="min-w-0 flex-1 bg-transparent py-2 text-xs outline-none"
+                              />
+                            </label>
+                          </div>
+
+                          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                            {visibleBooks.map((book) => {
+                              const key = bookKey(book);
+                              const expandedBook = expandedBookKey === key;
+
+                              return (
+                                <div key={key} className="border-b border-slate-100 last:border-b-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleBook(book)}
+                                    className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_24px] items-center gap-3 px-3 py-2 text-left text-xs transition hover:bg-slate-50 sm:grid-cols-[minmax(0,1fr)_70px_80px_70px_92px_24px]"
+                                  >
+                                    <span className="flex min-w-0 items-center gap-2">
+                                      <FileText size={15} className="shrink-0 text-slate-500" />
+                                      <span className="truncate font-semibold text-slate-800">
+                                        {book.book || "Unknown PDF"}
+                                      </span>
+                                    </span>
+                                    <span className="hidden text-slate-500 sm:inline">
+                                      Pages {formatNumber(book.pageCount)}
+                                    </span>
+                                    <span className="hidden text-slate-500 sm:inline">
+                                      Chunks {formatNumber(book.chunks)}
+                                    </span>
+                                    <span className="hidden text-slate-500 sm:inline">
+                                      v{book.currentVersion || book.version || 1}
+                                    </span>
+                                    <span className={`hidden justify-self-start rounded-full border px-2 py-0.5 text-[10px] font-bold sm:inline ${statusStyles(book.status)}`}>
+                                      {statusLabel(book.status)}
+                                    </span>
+                                    {expandedBook ? (
+                                      <ChevronDown size={15} className="text-slate-400" />
+                                    ) : (
+                                      <ChevronRight size={15} className="text-slate-400" />
+                                    )}
+                                  </button>
+
+                                  {expandedBook && (
+                                    <BookDetail
+                                      book={book}
+                                      deleting={deletingBook === key}
+                                      onDelete={() => handleDelete(book)}
+                                    />
+                                  )}
+                                </div>
+                              );
+                            })}
+
+                            {visibleBooks.length === 0 && (
+                              <p className="px-3 py-4 text-xs text-slate-500">
+                                No PDFs match this subject search.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function Message({ children, tone }) {
+  const toneClass =
+    tone === "success"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+      : tone === "running" || tone === "pending"
+      ? "border-violet-200 bg-violet-50 text-violet-800"
+      : "border-red-200 bg-red-50 text-red-700";
+
+  return (
+    <div className={`rounded-lg border px-3 py-2 text-sm ${toneClass}`}>
+      {tone === "success" && <CheckCircle2 size={16} className="mr-2 inline" />}
+      {children}
+    </div>
+  );
+}
+
+function EmptyState({ icon: Icon, title, text, actionLabel, onAction }) {
+  return (
+    <div className="px-5 py-14 text-center">
+      <Icon className="mx-auto text-slate-400" size={32} />
+      <p className="mt-4 font-bold text-slate-800">{title}</p>
+      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+        {text}
+      </p>
+      {actionLabel && (
+        <button
+          type="button"
+          onClick={onAction}
+          className="mt-5 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700"
+        >
+          <RefreshCw size={16} />
+          {actionLabel}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function BookDetail({ book, deleting, onDelete }) {
+  const health = book.health || {};
+  const details = [
+    ["Pages", formatNumber(book.pageCount)],
+    ["Chunks", formatNumber(book.chunks)],
+    ["Version", `v${book.currentVersion || book.version || 1}`],
+    ["File Size", formatBytes(book.fileSize)],
+    ["Hash", book.fileHash || "—"],
+    ["Indexed", formatDate(book.lastIndexedAt || book.indexedAt)],
+    ["Uploaded", formatDate(book.uploadedAt)],
+    ["Questions Answered", formatNumber(book.questionsAnswered)],
+    ["Last Used", formatRelativeDate(book.lastUsedAt)],
+    ["Duplicate Chunks", formatNumber(health.duplicateChunks || 0)],
+    ["Missing Pages", formatNumber(health.missingPageMetadata || 0)],
+    ["Embedding Status", health.missingEmbeddings || "Not measured"],
+  ];
+
+  return (
+    <div className="border-t border-slate-100 bg-white px-3 py-3">
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">
+        <div className="min-w-0">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {details.map(([label, value]) => (
+              <div key={label} className="min-w-0 rounded-lg bg-slate-50 px-3 py-2">
+                <p className="truncate text-xs font-bold text-slate-800" title={String(value)}>
+                  {value}
+                </p>
+                <p className="mt-1 text-[10px] text-slate-500">{label}</p>
+              </div>
+            ))}
           </div>
 
-          {loading ? (
-            <div className="space-y-3 p-4 sm:p-5" aria-label="Loading library">
-              {[0, 1, 2, 3].map((item) => (
+          {Array.isArray(book.searchMatches) && book.searchMatches.length > 0 && (
+            <div className="mt-3 space-y-2">
+              <p className="text-xs font-bold text-slate-700">Preview</p>
+              {book.searchMatches.slice(0, 3).map((match, index) => (
                 <div
-                  key={item}
-                  className="h-20 animate-pulse rounded-xl bg-slate-100"
-                />
-              ))}
-            </div>
-          ) : error ? (
-            <div className="px-5 py-16 text-center">
-              <RefreshCw className="mx-auto text-slate-400" size={34} />
-              <p className="mt-4 font-bold text-slate-800">
-                Unable to load the library
-              </p>
-              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-                {error}
-              </p>
-              <button
-                type="button"
-                onClick={retry}
-                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700"
-              >
-                <RefreshCw size={16} />
-                Retry
-              </button>
-            </div>
-          ) : books.length === 0 ? (
-            <div className="px-5 py-16 text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
-                <LibraryBig size={30} />
-              </div>
-              <p className="mt-5 font-bold text-slate-800">
-                No ebooks have been added yet.
-              </p>
-              <span className="mt-4 inline-flex rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-500">
-                Use the upload form above
-              </span>
-            </div>
-          ) : filteredBooks.length === 0 ? (
-            <div className="px-5 py-14 text-center">
-              <Search className="mx-auto text-slate-400" size={30} />
-              <p className="mt-4 font-bold text-slate-800">
-                No matching ebooks
-              </p>
-                <p className="mt-1 text-sm text-slate-500">
-                  Try another book name, subject, filename, or content phrase.
-                </p>
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-200">
-              {Object.entries(groups).map(([subject, subjectBooks]) => (
-                <div key={subject} className="p-4 sm:p-5">
-                  <div className="mb-3 flex items-center gap-2">
-                    <BookOpen size={17} className="text-blue-600" />
-                    <h2 className="font-bold text-slate-900">{subject}</h2>
-                    <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-500">
-                      {subjectBooks.length}
-                    </span>
-                  </div>
-
-                    <div className="space-y-2">
-                      {subjectBooks.map((book, index) => (
-                        <article
-                          key={`${book.subject}-${book.book}-${index}`}
-                          className="min-w-0 rounded-xl border border-slate-200 p-4"
-                        >
-                          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                            <div className="flex min-w-0 items-start gap-3">
-                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
-                                <FileText size={18} />
-                              </div>
-                              <div className="min-w-0">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <p className="break-words text-sm font-bold text-slate-800">
-                                    {book.book || "Unknown book"}
-                                  </p>
-                                  <span
-                                    className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-bold ${statusStyles(book.status)}`}
-                                  >
-                                    {statusLabel(book.status)}
-                                  </span>
-                                </div>
-                                <p className="mt-1 text-xs text-slate-500">
-                                  {book.filename || book.book || "Unknown filename"}
-                                </p>
-                                <p className="mt-1 text-xs text-slate-500">
-                                  Accuracy: {book.accuracy || "Not measured"}
-                                </p>
-                              </div>
-                            </div>
-
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(book)}
-                              disabled={
-                                deletingBook === `${book.subject}/${book.book}`
-                              }
-                              aria-label={`Delete ${book.book}`}
-                              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-red-200 text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {deletingBook ===
-                              `${book.subject}/${book.book}` ? (
-                                <RefreshCw size={16} className="animate-spin" />
-                              ) : (
-                                <Trash2 size={16} />
-                              )}
-                            </button>
-                          </div>
-
-                          <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
-                            {[
-                              ["Subject", book.subject || "Unknown"],
-                              ["Version", `v${book.currentVersion || book.version || 1}`],
-                              ["Pages", formatNumber(book.pageCount)],
-                              ["Chunks", formatNumber(book.chunks)],
-                              ["Answered", formatNumber(book.questionsAnswered)],
-                              ["Last used", formatDate(book.lastUsedAt)],
-                              ["Indexed", formatDate(book.lastIndexedAt || book.indexedAt)],
-                              ["Uploaded", formatDate(book.uploadedAt)],
-                            ].map(([label, value]) => (
-                              <div key={label} className="rounded-lg bg-slate-50 p-2.5">
-                                <p className="truncate text-xs font-bold text-slate-800" title={String(value)}>
-                                  {value}
-                                </p>
-                                <p className="mt-1 text-[10px] text-slate-500">
-                                  {label}
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-
-                          <div className="mt-3 grid gap-2 md:grid-cols-3 xl:grid-cols-6">
-                            {[
-                              ["Avg chunk", book.health?.averageChunkSize ? `${book.health.averageChunkSize} chars` : "—"],
-                              ["Missing embeddings", book.health?.missingEmbeddings ?? "Not measured"],
-                              ["Duplicates", book.health?.duplicateChunks ?? 0],
-                              ["Index errors", Array.isArray(book.health?.indexingErrors) ? book.health.indexingErrors.length : 0],
-                              ["Missing pages", book.health?.missingPageMetadata ?? 0],
-                              ["File size", formatBytes(book.fileSize)],
-                            ].map(([label, value]) => (
-                              <div key={label} className="rounded-lg border border-slate-100 px-2.5 py-2 text-xs">
-                                <span className="font-semibold text-slate-700">{label}: </span>
-                                <span className="text-slate-500">{healthValue(value)}</span>
-                              </div>
-                            ))}
-                          </div>
-
-                          {Array.isArray(book.health?.indexingErrors) &&
-                            book.health.indexingErrors.length > 0 && (
-                              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                                {book.health.indexingErrors[0]}
-                              </div>
-                            )}
-
-                          {Array.isArray(book.searchMatches) &&
-                            book.searchMatches.length > 0 && (
-                              <div className="mt-3 space-y-2">
-                                {book.searchMatches.map((match, matchIndex) => (
-                                  <div
-                                    key={`${match.chunkId || match.type}-${matchIndex}`}
-                                    className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-900"
-                                  >
-                                    <p className="font-bold">
-                                      {match.book || book.book} ·{" "}
-                                      {match.page
-                                        ? `Page ${match.page}`
-                                        : "Book metadata"}
-                                    </p>
-                                    <p className="mt-1 leading-5 text-blue-800">
-                                      {match.preview}
-                                    </p>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                        </article>
-                      ))}
-                    </div>
+                  key={`${match.chunkId || match.type}-${index}`}
+                  className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-900"
+                >
+                  <p className="font-bold">
+                    {match.page ? `Page ${match.page}` : "Book metadata"}
+                  </p>
+                  <p className="mt-1 leading-5 text-blue-800">{match.preview}</p>
                 </div>
               ))}
             </div>
           )}
-        </section>
+
+          {Array.isArray(health.indexingErrors) &&
+            health.indexingErrors.length > 0 && (
+              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                {health.indexingErrors[0]}
+              </div>
+            )}
+        </div>
+
+        <div className="space-y-2">
+          <div className="rounded-lg border border-slate-200 p-3">
+            <p className="text-xs font-bold text-slate-700">Version History</p>
+            <p className="mt-1 text-xs text-slate-500">
+              Current v{book.currentVersion || book.version || 1}
+            </p>
+            <p className="mt-1 break-all text-[11px] text-slate-400">
+              Previous: {book.previousVersionId || "None"}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={deleting}
+            className="inline-flex w-full min-h-10 items-center justify-center gap-2 rounded-lg border border-red-200 text-sm font-bold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {deleting ? (
+              <RefreshCw size={16} className="animate-spin" />
+            ) : (
+              <Trash2 size={16} />
+            )}
+            Delete PDF
+          </button>
+        </div>
       </div>
     </div>
   );
