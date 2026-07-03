@@ -14,7 +14,7 @@ from services.models import AnswerPackage
 logger = logging.getLogger(__name__)
 
 
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = "v2"
 GEMINI_FALLBACK_NOTICE = (
     "Note: This topic is not currently covered in AssamWork's uploaded "
     "study materials. The following answer is based on Gemini's general knowledge."

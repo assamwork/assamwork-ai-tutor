@@ -16,7 +16,7 @@ class AnswerPackage:
     confidence: dict | None = None
     created_at: str = field(default_factory=_utc_now_iso)
     cache_key: str = ""
-    prompt_version: str = "v1"
+    prompt_version: str = "v2"
     mcqs: list[dict] = field(default_factory=list)
     flashcards: list[dict] = field(default_factory=list)
     mind_map: dict | None = None

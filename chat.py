@@ -95,6 +95,282 @@ INTENT_WORDS = {
 RETRIEVAL_QUERY_ALIASES = (
     (re.compile(r"\bdipor\s+beel\b", re.IGNORECASE), "Deepor Beel"),
 )
+QUESTION_TYPE_RULES = (
+    ("Constitution Article", (
+        r"\barticle\s+\d+[a-z]?\b",
+        r"\bfundamental rights?\b",
+        r"\bdirective principles?\b",
+        r"\bdpsp\b",
+        r"\bconstitution(?:al)?\b",
+    )),
+    ("Scheme", (
+        r"\bschemes?\b",
+        r"\byojana\b",
+        r"\bmission\b",
+        r"\bprogramme\b",
+        r"\bbeneficiar(?:y|ies)\b",
+        r"\bministry\b",
+        r"\blaunched?\b",
+    )),
+    ("Battle", (
+        r"\bbattle\b",
+        r"\bwar\b",
+        r"\bconflict\b",
+        r"\bsaraighat\b",
+    )),
+    ("Movement", (
+        r"\bmovement\b",
+        r"\brevolt\b",
+        r"\brebellion\b",
+        r"\bsatyagraha\b",
+        r"\bquit india\b",
+        r"\bnon cooperation\b",
+    )),
+    ("River", (
+        r"\brivers?\b",
+        r"\btributar(?:y|ies)\b",
+        r"\bbrahmaputra\b",
+        r"\bbarak\b",
+    )),
+    ("Mountain", (
+        r"\bmountains?\b",
+        r"\bhills?\b",
+        r"\bpeaks?\b",
+        r"\branges?\b",
+    )),
+    ("Environment", (
+        r"\benvironment\b",
+        r"\becology\b",
+        r"\bbiodiversity\b",
+        r"\bwetlands?\b",
+        r"\bramsar\b",
+        r"\bnational parks?\b",
+        r"\bwildlife\b",
+        r"\bpollution\b",
+        r"\bclimate\b",
+        r"\bconservation\b",
+    )),
+    ("Geography", (
+        r"\bgeography\b",
+        r"\blocation\b",
+        r"\blocated\b",
+        r"\bmap\b",
+        r"\bdistrict\b",
+        r"\bstate\b",
+        r"\bsoil\b",
+        r"\bvalley\b",
+        r"\bbeel\b",
+        r"\blake\b",
+    )),
+    ("Science", (
+        r"\bscience\b",
+        r"\bphysics\b",
+        r"\bchemistry\b",
+        r"\bbiology\b",
+        r"\bcells?\b",
+        r"\batoms?\b",
+        r"\bforce\b",
+        r"\benergy\b",
+        r"\bphotosynthesis\b",
+        r"\bdisease\b",
+        r"\bvirus\b",
+        r"\bbacteria\b",
+    )),
+    ("Economy", (
+        r"\beconom(?:y|ic|ics)\b",
+        r"\bgdp\b",
+        r"\binflation\b",
+        r"\bbudget\b",
+        r"\btax\b",
+        r"\bbank(?:ing)?\b",
+        r"\bmarket\b",
+        r"\bfinance\b",
+        r"\brevenue\b",
+    )),
+    ("Mathematics", (
+        r"\bmath(?:s|ematics)?\b",
+        r"\bcalculate\b",
+        r"\bformula\b",
+        r"\bpercentage\b",
+        r"\bratio\b",
+        r"\bprofit\b",
+        r"\bloss\b",
+        r"\binterest\b",
+        r"\balgebra\b",
+    )),
+    ("Organization", (
+        r"\borganisations?\b",
+        r"\borganizations?\b",
+        r"\binstitutions?\b",
+        r"\bcommittees?\b",
+        r"\bcommissions?\b",
+        r"\bcouncils?\b",
+        r"\bunesco\b",
+        r"\basean\b",
+        r"\bsaarc\b",
+    )),
+    ("Person", (
+        r"^\s*who\s+(?:is|was)\b",
+        r"\bbiograph(?:y|ical)\b",
+        r"\bborn\b",
+        r"\bleader\b",
+        r"\bgeneral\b",
+        r"\bking\b",
+        r"\bchief minister\b",
+        r"\bminister\b",
+        r"\bpresident\b",
+        r"\bauthor\b",
+        r"\bpoet\b",
+        r"\bsinger\b",
+        r"\bscientist\b",
+    )),
+    ("Current Affairs", (
+        r"\bcurrent affairs?\b",
+        r"\brecent\b",
+        r"\blatest\b",
+        r"\bappointed\b",
+        r"\bwon\b",
+        r"\b202[4-9]\b",
+    )),
+    ("History", (
+        r"\bhistory\b",
+        r"\bdynasty\b",
+        r"\bahom\b",
+        r"\bancient\b",
+        r"\bmedieval\b",
+        r"\bmodern\b",
+        r"\bkingdom\b",
+    )),
+)
+EXAM_AUDIENCE = (
+    "APSC, ADRE, Assam Police, Assam TET, Grade 3, Grade 4, "
+    "Guwahati High Court, Class 10, and Class 12"
+)
+EXAM_TEMPLATES = {
+    "Person": (
+        "## Introduction\n"
+        "- 2-3 concise lines.\n\n"
+        "## Key Facts\n"
+        "- Born\n"
+        "- Position\n"
+        "- Known For\n"
+        "- Important Events\n\n"
+        "## Contributions\n"
+        "- High-yield contributions only.\n\n"
+        "## Exam Highlights\n"
+        "- Frequently asked facts from the material.\n\n"
+        "## Quick Revision\n"
+        "- 5 short memory bullets."
+    ),
+    "Constitution Article": (
+        "## Definition\n"
+        "## Key Provisions\n"
+        "## Important Judgments\n"
+        "## Exceptions\n"
+        "## Exam Facts\n"
+        "## Quick Revision"
+    ),
+    "Scheme": (
+        "## Launch Year\n"
+        "## Ministry\n"
+        "## Objective\n"
+        "## Beneficiaries\n"
+        "## Features\n"
+        "## Latest Updates\n"
+        "## Exam Facts"
+    ),
+    "Battle": (
+        "## Background\n"
+        "## Causes\n"
+        "## Timeline\n"
+        "## Outcome\n"
+        "## Importance\n"
+        "## Exam Highlights"
+    ),
+    "Movement": (
+        "## Background\n"
+        "## Causes\n"
+        "## Timeline\n"
+        "## Outcome\n"
+        "## Importance\n"
+        "## Exam Highlights"
+    ),
+    "Geography": (
+        "## Location\n"
+        "## Features\n"
+        "## Importance\n"
+        "## Map Facts\n"
+        "## Exam Highlights"
+    ),
+    "River": (
+        "## Location / Course\n"
+        "## Features\n"
+        "## Tributaries / Associated Places\n"
+        "## Importance\n"
+        "## Map Facts\n"
+        "## Exam Highlights"
+    ),
+    "Mountain": (
+        "## Location\n"
+        "## Features\n"
+        "## Importance\n"
+        "## Map Facts\n"
+        "## Exam Highlights"
+    ),
+    "Science": (
+        "## Definition\n"
+        "## Working Principle\n"
+        "## Applications\n"
+        "## Important Facts\n"
+        "## Memory Tips"
+    ),
+    "Current Affairs": (
+        "## What Happened\n"
+        "## Background\n"
+        "## Importance\n"
+        "## Exam Relevance\n"
+        "## Possible MCQ Points"
+    ),
+    "Environment": (
+        "## Definition / Location\n"
+        "## Key Features\n"
+        "## Ecological Importance\n"
+        "## Conservation Facts\n"
+        "## Exam Highlights"
+    ),
+    "Economy": (
+        "## Meaning\n"
+        "## Key Points\n"
+        "## Data / Institutions\n"
+        "## Exam Facts\n"
+        "## Quick Revision"
+    ),
+    "Organization": (
+        "## Overview\n"
+        "## Formation / Headquarters\n"
+        "## Objectives\n"
+        "## Functions\n"
+        "## Exam Facts"
+    ),
+    "History": (
+        "## Background\n"
+        "## Key Facts\n"
+        "## Timeline\n"
+        "## Importance\n"
+        "## Exam Highlights"
+    ),
+    "Mathematics": (
+        "## Formula / Concept\n"
+        "## Steps\n"
+        "## Example\n"
+        "## Shortcut / Exam Tip"
+    ),
+    "General": (
+        "## Key Points\n"
+        "## Exam Relevance\n"
+        "## Quick Revision"
+    ),
+}
 
 
 class KnowledgeBaseNotIndexedError(RuntimeError):
@@ -834,7 +1110,17 @@ def _retrieve_context(question: str, trace_id: str | None = None):
     }
 
 
-def _answer_style_instruction(question: str):
+def _classify_question(question: str, retrieval_query: str | None = None):
+    combined_text = f"{question or ''} {retrieval_query or ''}".lower()
+
+    for question_type, patterns in QUESTION_TYPE_RULES:
+        if any(re.search(pattern, combined_text, re.IGNORECASE) for pattern in patterns):
+            return question_type
+
+    return "General"
+
+
+def _answer_length_instruction(question: str, question_type: str):
     normalized = question.lower().strip()
 
     if any(
@@ -842,9 +1128,10 @@ def _answer_style_instruction(question: str):
         for keyword in ("mcq", "mcqs", "quiz", "question paper")
     ):
         return (
-            "If the user asks for MCQs or a quiz, format the answer as "
-            "numbered multiple-choice questions with options and mark the "
-            "correct answer."
+            "The user wants exam practice. If the retrieved material supports "
+            "it, format as numbered multiple-choice questions with options and "
+            "mark the correct answer. Do not create questions from unsupported "
+            "facts."
         )
 
     if any(
@@ -861,14 +1148,19 @@ def _answer_style_instruction(question: str):
         )
     ):
         return (
-            "For detailed, explain, describe, discuss, notes, or achievement "
-            "requests, give a structured answer with concise headings and "
-            "bullet points where useful."
+            "This is a medium or long answer request. Give structured exam "
+            "notes with concise headings, bullets, and tables only when useful."
+        )
+
+    if question_type != "General":
+        return (
+            "This is a short exam question. Use the selected template, but keep "
+            "each section tight and avoid long paragraphs."
         )
 
     if normalized.startswith(("who is", "what is", "who was", "what was")):
         return (
-            "For simple who/what questions, answer in 2-4 short lines. "
+            "This is a short question. Answer in 2-5 high-yield bullets. "
             "Do not over-explain."
         )
 
@@ -878,11 +1170,39 @@ def _answer_style_instruction(question: str):
     )
 
 
-def _answer_prompt(question: str, context: str, retrieval_query: str | None = None):
-    retrieval_text = retrieval_query or question
+def _exam_template_instruction(question_type: str):
+    template = EXAM_TEMPLATES.get(question_type) or EXAM_TEMPLATES["General"]
 
     return f"""
-You are AssamWork AI Tutor.
+Detected Question Type: {question_type}
+
+Use this exam-oriented answer template when the retrieved material supports it:
+
+{template}
+
+Template rules:
+- Omit any section whose facts are not present in the supplied study material.
+- Never fill missing fields from outside knowledge.
+- Prefer compact Markdown headings, bullets, and small tables where appropriate.
+- Avoid Wikipedia-style paragraphs.
+- Add labels such as Exam Tip, Frequently Asked, Remember, Important Year,
+  Mnemonic, or PYQ Hint only when the content is directly supported by the
+  supplied material.
+"""
+
+
+def _answer_prompt(question: str, context: str, retrieval_query: str | None = None):
+    retrieval_text = retrieval_query or question
+    question_type = _classify_question(question, retrieval_text)
+
+    return f"""
+You are AssamWork AI Tutor in Competitive Exam Teacher Mode.
+
+You are an experienced faculty member for {EXAM_AUDIENCE}.
+
+Your goal is to help the student score marks.
+Do not behave like a general chatbot.
+Do not sound like Wikipedia.
 
 Answer ONLY using the study material below.
 
@@ -906,11 +1226,15 @@ Standalone Retrieval Query:
 
 {retrieval_text}
 
-Style:
+Exam Template:
 
-{_answer_style_instruction(question)}
+{_exam_template_instruction(question_type)}
 
-Write in exam-oriented language. Preserve source grounding.
+Answer Length:
+
+{_answer_length_instruction(question, question_type)}
+
+Write in revision-friendly exam language. Preserve source grounding.
 """
 
 
@@ -938,9 +1262,8 @@ Standalone Query:
 
 Style:
 
-{_answer_style_instruction(question)}
-
-Write in clear exam-oriented language when useful.
+Answer clearly and concisely. Do not apply Knowledge Base exam templates to
+Gemini fallback answers. Do not create citations.
 """
 
 
@@ -970,7 +1293,7 @@ def _structured_prompt(
 Return JSON only with this structure:
 {{
   "answer": "exam-oriented answer text",
-  "revision": ["3-5 concise revision bullet points"]
+  "revision": ["3-5 high-yield quick revision facts"]
 }}
 
 If the supplied study material is insufficient, return:
@@ -983,9 +1306,13 @@ If the supplied study material is insufficient, return:
 
 def _revision_prompt(question: str, context: str, answer: str):
     return f"""
-You are AssamWork AI Tutor.
+You are AssamWork AI Tutor in Competitive Exam Teacher Mode.
 
-Using only the study material and completed answer below, create 3-5 concise revision bullet points.
+Using only the study material and completed answer below, create 3-5 high-yield
+quick revision bullets for competitive exam students.
+
+Prefer years, names, places, battles, articles, institutions, features, and
+frequently asked facts when they are present.
 
 If the answer says the supplied material does not contain enough information,
 return an empty revision list.
@@ -1004,7 +1331,7 @@ Completed Answer:
 
 Return JSON only with this structure:
 {{
-  "revision": ["concise revision bullet point"]
+  "revision": ["high-yield quick revision fact"]
 }}
 """
 
