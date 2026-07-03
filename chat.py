@@ -19,14 +19,67 @@ _rag_lock = threading.Lock()
 _client = None
 _collection = None
 
-KNOWLEDGE_BASE_NOT_INDEXED_ANSWER = (
-    "Knowledge base not indexed yet. Please ask an admin to re-index "
-    "the AssamWork ebook library, then try again."
-)
 CLARIFICATION_MESSAGE = (
     "Please clarify what you want me to refer to, so I can answer "
     "from the AssamWork study materials."
 )
+GEMINI_FALLBACK_NOTICE = (
+    "Note: This topic is not currently covered in AssamWork's uploaded "
+    "study materials. The following answer is based on Gemini's general knowledge."
+)
+STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "by",
+    "for",
+    "from",
+    "give",
+    "how",
+    "in",
+    "into",
+    "is",
+    "it",
+    "its",
+    "me",
+    "of",
+    "on",
+    "or",
+    "the",
+    "this",
+    "that",
+    "to",
+    "was",
+    "were",
+    "what",
+    "when",
+    "where",
+    "which",
+    "who",
+    "why",
+}
+INTENT_WORDS = {
+    "achievement",
+    "achievements",
+    "describe",
+    "detail",
+    "discuss",
+    "elaborate",
+    "example",
+    "examples",
+    "explain",
+    "mcq",
+    "mcqs",
+    "note",
+    "notes",
+    "quiz",
+    "revision",
+    "summarize",
+}
 
 
 class KnowledgeBaseNotIndexedError(RuntimeError):
@@ -137,6 +190,43 @@ def _history_text(history):
     return "\n".join(
         f"{message['role'].title()}: {message['content']}"
         for message in history
+    )
+
+
+def _tokenize(value: str):
+    return [
+        token
+        for token in re.findall(r"[a-zA-Z0-9]+", value.lower())
+        if token and token not in STOPWORDS
+    ]
+
+
+def _important_query_terms(question: str):
+    return [
+        token
+        for token in _tokenize(question)
+        if token not in INTENT_WORDS
+    ]
+
+
+def _is_greeting(question: str):
+    normalized = re.sub(r"[^a-z\s]", "", question.lower()).strip()
+
+    return normalized in {
+        "hello",
+        "hi",
+        "hey",
+        "good morning",
+        "good afternoon",
+        "good evening",
+        "namaste",
+    }
+
+
+def _greeting_answer():
+    return (
+        "Hello! Ask me anything from AssamWork's uploaded study materials, "
+        "and I'll answer with sources when the topic is covered."
     )
 
 
@@ -253,6 +343,98 @@ def _sources_from_metadatas(metadatas):
     return sources
 
 
+def _flatten_query_result(results, key):
+    values = results.get(key) or []
+
+    if not values:
+        return []
+
+    first = values[0]
+
+    if isinstance(first, list):
+        return first
+
+    return values
+
+
+def _evaluate_retrieval_confidence(question: str, documents, distances=None):
+    documents = documents or []
+    distances = distances or []
+    important_terms = _important_query_terms(question)
+
+    if not documents:
+        return {
+            "mode": "gemini_fallback",
+            "reason": "no_documents",
+            "useful_chunks": 0,
+            "important_terms": important_terms,
+        }
+
+    if not important_terms:
+        return {
+            "mode": "gemini_fallback",
+            "reason": "no_search_terms",
+            "useful_chunks": 0,
+            "important_terms": important_terms,
+        }
+
+    useful_chunks = 0
+    best_overlap = 0
+    combined_terms = set()
+
+    for document in documents:
+        document_terms = set(_tokenize(document or ""))
+        overlap = set(important_terms) & document_terms
+        overlap_count = len(overlap)
+
+        if overlap_count:
+            useful_chunks += 1
+            combined_terms.update(overlap)
+            best_overlap = max(best_overlap, overlap_count)
+
+    unique_term_count = len(set(important_terms))
+    required_terms = (
+        unique_term_count
+        if unique_term_count <= 2
+        else max(1, unique_term_count // 2)
+    )
+    enough_term_coverage = len(combined_terms) >= required_terms
+    focused_chunk_match = best_overlap >= required_terms
+    repeated_evidence = useful_chunks >= min(2, len(documents))
+
+    distance_support = False
+
+    numeric_distances = [
+        value
+        for value in distances
+        if isinstance(value, (int, float))
+    ]
+
+    if len(numeric_distances) >= 2:
+        best_distance = min(numeric_distances)
+        average_distance = sum(numeric_distances) / len(numeric_distances)
+        distance_support = best_distance < average_distance
+
+    if (
+        enough_term_coverage
+        and focused_chunk_match
+        and (repeated_evidence or distance_support or len(documents) == 1)
+    ):
+        return {
+            "mode": "knowledge_base",
+            "reason": "query_terms_supported_by_retrieved_chunks",
+            "useful_chunks": useful_chunks,
+            "important_terms": important_terms,
+        }
+
+    return {
+        "mode": "gemini_fallback",
+        "reason": "retrieval_evidence_too_weak",
+        "useful_chunks": useful_chunks,
+        "important_terms": important_terms,
+    }
+
+
 def _retrieve_context(question: str):
     global _collection
 
@@ -262,12 +444,16 @@ def _retrieve_context(question: str):
         results = collection.query(
             query_texts=[question],
             n_results=5,
+            include=["documents", "metadatas", "distances"],
         )
     except KnowledgeBaseNotIndexedError:
         return {
-            "answer": KNOWLEDGE_BASE_NOT_INDEXED_ANSWER,
-            "revision": "",
+            "context": "",
             "sources": [],
+            "confidence": {
+                "mode": "gemini_fallback",
+                "reason": "knowledge_base_not_indexed",
+            },
         }
     except Exception as error:
         _collection = None
@@ -279,24 +465,38 @@ def _retrieve_context(question: str):
             error,
         )
         return {
-            "answer": KNOWLEDGE_BASE_NOT_INDEXED_ANSWER,
-            "revision": "",
+            "context": "",
             "sources": [],
+            "confidence": {
+                "mode": "gemini_fallback",
+                "reason": "knowledge_base_unavailable",
+            },
         }
 
-    documents = results["documents"][0]
-    metadatas = results["metadatas"][0]
+    documents = _flatten_query_result(results, "documents")
+    metadatas = _flatten_query_result(results, "metadatas")
+    distances = _flatten_query_result(results, "distances")
 
     if not documents:
         return {
-            "answer": "I couldn't find this information in the uploaded AssamWork study materials.",
-            "revision": "",
+            "context": "",
             "sources": [],
+            "confidence": {
+                "mode": "gemini_fallback",
+                "reason": "no_documents",
+            },
         }
+
+    confidence = _evaluate_retrieval_confidence(
+        question,
+        documents,
+        distances,
+    )
 
     return {
         "context": "\n\n".join(documents),
         "sources": _sources_from_metadatas(metadatas),
+        "confidence": confidence,
     }
 
 
@@ -356,6 +556,9 @@ If the answer is not found, reply exactly:
 
 I couldn't find this information in the uploaded AssamWork study materials.
 
+Use only the supplied study material.
+If the answer cannot be fully derived from the supplied context, do not invent facts.
+Do not complete missing information from your own knowledge.
 Do not add any other text when the answer is not found.
 
 Study Material:
@@ -376,6 +579,42 @@ Style:
 
 Write in exam-oriented language. Preserve source grounding.
 """
+
+
+def _general_knowledge_prompt(question: str, retrieval_query: str | None = None):
+    retrieval_text = retrieval_query or question
+
+    return f"""
+You are AssamWork AI Tutor.
+
+The uploaded AssamWork study materials did not contain sufficient relevant material for this question.
+
+Answer using Gemini's general knowledge.
+
+Do not cite AssamWork study materials.
+Do not invent page numbers or references.
+Do not mention sources.
+
+Original User Question:
+
+{question}
+
+Standalone Query:
+
+{retrieval_text}
+
+Style:
+
+{_answer_style_instruction(question)}
+
+Write in clear exam-oriented language when useful.
+"""
+
+
+def _fallback_answer_text(answer: str):
+    clean_answer = (answer or "No answer returned.").strip()
+
+    return f"{GEMINI_FALLBACK_NOTICE}\n\n{clean_answer}"
 
 
 def _structured_prompt(
@@ -471,11 +710,34 @@ def generate_revision(question: str, context: str, answer: str):
     return _parse_structured_answer(response.text)["revision"]
 
 
+def generate_general_answer(question: str, retrieval_query: str):
+    response = get_client().models.generate_content(
+        model="gemini-2.5-flash",
+        contents=_general_knowledge_prompt(question, retrieval_query),
+    )
+
+    return _fallback_answer_text(response.text)
+
+
 def stream_answer(
     question: str,
     history=None,
     stop_event: threading.Event | None = None,
 ):
+    if _is_greeting(question):
+        logger.info("Mode: Gemini Fallback (greeting)")
+        yield {
+            "type": "chunk",
+            "text": _greeting_answer(),
+        }
+        yield {
+            "type": "metadata",
+            "sources": [],
+            "revision": "",
+            "confidence": None,
+        }
+        return
+
     rewrite = rewrite_question(question, history)
 
     if rewrite["clarification"]:
@@ -494,20 +756,70 @@ def stream_answer(
     retrieval_query = rewrite["query"]
     rag = _retrieve_context(retrieval_query)
 
-    if "answer" in rag:
-        yield {
-            "type": "chunk",
-            "text": rag["answer"],
-        }
-        yield {
-            "type": "metadata",
-            "sources": rag.get("sources", []),
-            "revision": rag.get("revision", ""),
-            "confidence": None,
-        }
+    context = rag["context"]
+    confidence = rag.get("confidence") or {}
+    mode = confidence.get("mode")
+
+    if mode != "knowledge_base":
+        logger.info(
+            "Mode: Gemini Fallback. Reason: %s. Query: %s",
+            confidence.get("reason", "unknown"),
+            retrieval_query,
+        )
+        answer_parts = []
+
+        try:
+            yield {
+                "type": "chunk",
+                "text": f"{GEMINI_FALLBACK_NOTICE}\n\n",
+            }
+            stream = get_client().models.generate_content_stream(
+                model="gemini-2.5-flash",
+                contents=_general_knowledge_prompt(question, retrieval_query),
+            )
+
+            for chunk in stream:
+                if stop_event and stop_event.is_set():
+                    return
+
+                text = getattr(chunk, "text", "") or ""
+
+                if not text:
+                    continue
+
+                answer_parts.append(text)
+                yield {
+                    "type": "chunk",
+                    "text": text,
+                }
+
+            if not "".join(answer_parts).strip():
+                yield {
+                    "type": "chunk",
+                    "text": "No answer returned.",
+                }
+
+            yield {
+                "type": "metadata",
+                "sources": [],
+                "revision": "",
+                "confidence": confidence,
+            }
+        except Exception as error:
+            logger.warning("Unable to stream Gemini fallback answer: %s", error)
+            yield {
+                "type": "error",
+                "message": "Unable to get an answer right now. Please try again.",
+            }
+
         return
 
-    context = rag["context"]
+    logger.info(
+        "Mode: Knowledge Base. Reason: %s. Useful chunks: %s. Query: %s",
+        confidence.get("reason", "unknown"),
+        confidence.get("useful_chunks", 0),
+        retrieval_query,
+    )
     sources = rag["sources"]
     answer_parts = []
 
@@ -553,7 +865,7 @@ def stream_answer(
             "type": "metadata",
             "sources": sources,
             "revision": revision,
-            "confidence": None,
+            "confidence": confidence,
         }
     except Exception as error:
         logger.warning("Unable to stream Gemini answer: %s", error)
@@ -606,6 +918,14 @@ def get_collection():
 
 
 def ask_question(question: str, history=None):
+    if _is_greeting(question):
+        logger.info("Mode: Gemini Fallback (greeting)")
+        return {
+            "answer": _greeting_answer(),
+            "revision": "",
+            "sources": [],
+        }
+
     rewrite = rewrite_question(question, history)
 
     if rewrite["clarification"]:
@@ -618,8 +938,27 @@ def ask_question(question: str, history=None):
     retrieval_query = rewrite["query"]
     rag = _retrieve_context(retrieval_query)
 
-    if "answer" in rag:
-        return rag
+    confidence = rag.get("confidence") or {}
+
+    if confidence.get("mode") != "knowledge_base":
+        logger.info(
+            "Mode: Gemini Fallback. Reason: %s. Query: %s",
+            confidence.get("reason", "unknown"),
+            retrieval_query,
+        )
+
+        return {
+            "answer": generate_general_answer(question, retrieval_query),
+            "revision": "",
+            "sources": [],
+        }
+
+    logger.info(
+        "Mode: Knowledge Base. Reason: %s. Useful chunks: %s. Query: %s",
+        confidence.get("reason", "unknown"),
+        confidence.get("useful_chunks", 0),
+        retrieval_query,
+    )
 
     response = get_client().models.generate_content(
         model="gemini-2.5-flash",
