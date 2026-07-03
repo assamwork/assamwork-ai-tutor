@@ -2,6 +2,7 @@ import os
 import threading
 import logging
 import json
+import re
 
 import chromadb
 from dotenv import load_dotenv
@@ -21,6 +22,10 @@ _collection = None
 KNOWLEDGE_BASE_NOT_INDEXED_ANSWER = (
     "Knowledge base not indexed yet. Please ask an admin to re-index "
     "the AssamWork ebook library, then try again."
+)
+CLARIFICATION_MESSAGE = (
+    "Please clarify what you want me to refer to, so I can answer "
+    "from the AssamWork study materials."
 )
 
 
@@ -80,6 +85,150 @@ def _parse_structured_answer(response_text: str):
     return {
         "answer": answer or "No answer returned.",
         "revision": revision,
+    }
+
+
+def _parse_query_rewrite(response_text: str, fallback_question: str):
+    try:
+        payload = json.loads(response_text or "{}")
+    except json.JSONDecodeError:
+        return {
+            "standalone_question": fallback_question,
+            "clarification_needed": False,
+            "clarification": "",
+        }
+
+    standalone_question = str(
+        payload.get("standalone_question") or fallback_question
+    ).strip()
+    clarification = str(payload.get("clarification") or "").strip()
+
+    return {
+        "standalone_question": standalone_question or fallback_question,
+        "clarification_needed": bool(payload.get("clarification_needed")),
+        "clarification": clarification,
+    }
+
+
+def _normalize_history(history=None):
+    normalized = []
+
+    for message in (history or [])[-5:]:
+        role = str(message.get("role") or "").strip().lower()
+        content = str(message.get("content") or "").strip()
+
+        if role not in {"user", "assistant"} or not content:
+            continue
+
+        normalized.append(
+            {
+                "role": role,
+                "content": content[:900],
+            }
+        )
+
+    return normalized
+
+
+def _history_text(history):
+    if not history:
+        return "No prior conversation."
+
+    return "\n".join(
+        f"{message['role'].title()}: {message['content']}"
+        for message in history
+    )
+
+
+def _needs_conversation_context(question: str):
+    return bool(
+        re.search(
+            r"\b(he|his|him|she|her|they|their|it|its|this|that|these|those|above|same)\b",
+            question.lower(),
+        )
+    )
+
+
+def _rewrite_schema():
+    return {
+        "type": "object",
+        "properties": {
+            "standalone_question": {"type": "string"},
+            "clarification_needed": {"type": "boolean"},
+            "clarification": {"type": "string"},
+        },
+        "required": [
+            "standalone_question",
+            "clarification_needed",
+            "clarification",
+        ],
+    }
+
+
+def _rewrite_prompt(question: str, history):
+    return f"""
+Rewrite the latest user question into a standalone retrieval query for an ebook-grounded RAG system.
+
+Use the recent conversation only to resolve references such as he, his, this, that, these, it, above, or from this.
+
+Do not answer the question.
+Do not add facts that are not implied by the conversation.
+
+If the latest question depends on missing context and cannot be resolved, set clarification_needed to true and provide one short clarification question.
+
+Recent Conversation:
+{_history_text(history)}
+
+Latest User Question:
+{question}
+
+Return JSON only with this structure:
+{{
+  "standalone_question": "standalone retrieval query",
+  "clarification_needed": false,
+  "clarification": ""
+}}
+"""
+
+
+def rewrite_question(question: str, history=None):
+    normalized_history = _normalize_history(history)
+
+    if not normalized_history:
+        if _needs_conversation_context(question):
+            return {
+                "query": question,
+                "clarification": CLARIFICATION_MESSAGE,
+            }
+
+        return {
+            "query": question,
+            "clarification": "",
+        }
+
+    try:
+        response = get_client().models.generate_content(
+            model="gemini-2.5-flash",
+            contents=_rewrite_prompt(question, normalized_history),
+            config=_json_config(_rewrite_schema()),
+        )
+        rewrite = _parse_query_rewrite(response.text, question)
+    except Exception as error:
+        logger.warning("Unable to rewrite follow-up question: %s", error)
+        return {
+            "query": question,
+            "clarification": "",
+        }
+
+    if rewrite["clarification_needed"]:
+        return {
+            "query": rewrite["standalone_question"],
+            "clarification": rewrite["clarification"] or CLARIFICATION_MESSAGE,
+        }
+
+    return {
+        "query": rewrite["standalone_question"],
+        "clarification": "",
     }
 
 
@@ -151,7 +300,53 @@ def _retrieve_context(question: str):
     }
 
 
-def _answer_prompt(question: str, context: str):
+def _answer_style_instruction(question: str):
+    normalized = question.lower().strip()
+
+    if any(
+        keyword in normalized
+        for keyword in ("mcq", "mcqs", "quiz", "question paper")
+    ):
+        return (
+            "If the user asks for MCQs or a quiz, format the answer as "
+            "numbered multiple-choice questions with options and mark the "
+            "correct answer."
+        )
+
+    if any(
+        keyword in normalized
+        for keyword in (
+            "explain",
+            "describe",
+            "discuss",
+            "elaborate",
+            "detail",
+            "achievements",
+            "achievement",
+            "notes",
+        )
+    ):
+        return (
+            "For detailed, explain, describe, discuss, notes, or achievement "
+            "requests, give a structured answer with concise headings and "
+            "bullet points where useful."
+        )
+
+    if normalized.startswith(("who is", "what is", "who was", "what was")):
+        return (
+            "For simple who/what questions, answer in 2-4 short lines. "
+            "Do not over-explain."
+        )
+
+    return (
+        "Keep the answer concise by default. Expand only when the user asks "
+        "for detail."
+    )
+
+
+def _answer_prompt(question: str, context: str, retrieval_query: str | None = None):
+    retrieval_text = retrieval_query or question
+
     return f"""
 You are AssamWork AI Tutor.
 
@@ -167,17 +362,29 @@ Study Material:
 
 {context}
 
-Question:
+Original User Question:
 
 {question}
 
-Write in exam-oriented language.
+Standalone Retrieval Query:
+
+{retrieval_text}
+
+Style:
+
+{_answer_style_instruction(question)}
+
+Write in exam-oriented language. Preserve source grounding.
 """
 
 
-def _structured_prompt(question: str, context: str):
+def _structured_prompt(
+    question: str,
+    context: str,
+    retrieval_query: str | None = None,
+):
     return f"""
-{_answer_prompt(question, context)}
+{_answer_prompt(question, context, retrieval_query)}
 
 Return JSON only with this structure:
 {{
@@ -264,8 +471,28 @@ def generate_revision(question: str, context: str, answer: str):
     return _parse_structured_answer(response.text)["revision"]
 
 
-def stream_answer(question: str, stop_event: threading.Event | None = None):
-    rag = _retrieve_context(question)
+def stream_answer(
+    question: str,
+    history=None,
+    stop_event: threading.Event | None = None,
+):
+    rewrite = rewrite_question(question, history)
+
+    if rewrite["clarification"]:
+        yield {
+            "type": "chunk",
+            "text": rewrite["clarification"],
+        }
+        yield {
+            "type": "metadata",
+            "sources": [],
+            "revision": "",
+            "confidence": None,
+        }
+        return
+
+    retrieval_query = rewrite["query"]
+    rag = _retrieve_context(retrieval_query)
 
     if "answer" in rag:
         yield {
@@ -287,7 +514,7 @@ def stream_answer(question: str, stop_event: threading.Event | None = None):
     try:
         stream = get_client().models.generate_content_stream(
             model="gemini-2.5-flash",
-            contents=_answer_prompt(question, context),
+            contents=_answer_prompt(question, context, retrieval_query),
         )
 
         for chunk in stream:
@@ -378,15 +605,29 @@ def get_collection():
     return _collection
 
 
-def ask_question(question: str):
-    rag = _retrieve_context(question)
+def ask_question(question: str, history=None):
+    rewrite = rewrite_question(question, history)
+
+    if rewrite["clarification"]:
+        return {
+            "answer": rewrite["clarification"],
+            "revision": "",
+            "sources": [],
+        }
+
+    retrieval_query = rewrite["query"]
+    rag = _retrieve_context(retrieval_query)
 
     if "answer" in rag:
         return rag
 
     response = get_client().models.generate_content(
         model="gemini-2.5-flash",
-        contents=_structured_prompt(question, rag["context"]),
+        contents=_structured_prompt(
+            question,
+            rag["context"],
+            retrieval_query,
+        ),
         config=_json_config(_answer_schema()),
     )
     structured_answer = _parse_structured_answer(response.text)

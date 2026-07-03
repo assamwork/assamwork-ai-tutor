@@ -23,7 +23,7 @@ from fastapi.responses import StreamingResponse
 from google.auth import exceptions as google_auth_exceptions
 from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.oauth2 import id_token
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from chat import ask_question, stream_answer
 from ingest import ingest_library
@@ -63,8 +63,14 @@ app.add_middleware(
 )
 
 
+class ChatHistoryMessage(BaseModel):
+    role: str
+    content: str
+
+
 class Question(BaseModel):
     question: str
+    history: list[ChatHistoryMessage] = Field(default_factory=list)
 
 
 class DeleteBookRequest(BaseModel):
@@ -156,7 +162,10 @@ async def root():
 
 @app.post("/ask")
 async def ask(question: Question):
-    result = ask_question(question.question)
+    result = ask_question(
+        question.question,
+        [message.model_dump() for message in question.history],
+    )
 
     return {
         "answer": result["answer"],
@@ -188,7 +197,11 @@ async def ask_stream(question: Question, request: Request):
                 future.result()
 
             try:
-                for item in stream_answer(question.question, stop_event):
+                for item in stream_answer(
+                    question.question,
+                    [message.model_dump() for message in question.history],
+                    stop_event,
+                ):
                     if stop_event.is_set():
                         break
 

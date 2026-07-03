@@ -50,8 +50,29 @@ function parseSseEvent(rawEvent) {
   }
 }
 
+function getRecentChatHistory(chats, chatId) {
+  const chat = chats.find((item) => item.id === chatId);
+
+  if (!chat?.messages?.length) return [];
+
+  return chat.messages
+    .filter(
+      (message) =>
+        ["user", "assistant"].includes(message.role) &&
+        message.content?.trim() &&
+        !message.localOnly &&
+        !message.isStreaming
+    )
+    .slice(-5)
+    .map((message) => ({
+      role: message.role,
+      content: message.content.slice(0, 1200),
+    }));
+}
+
 async function streamAnswer({
   question,
+  history,
   signal,
   onChunk,
   onMetadata,
@@ -64,6 +85,7 @@ async function streamAnswer({
     },
     body: JSON.stringify({
       question,
+      history,
     }),
     signal,
   });
@@ -116,7 +138,7 @@ async function streamAnswer({
   }
 }
 
-async function fetchFallbackAnswer(question, signal) {
+async function fetchFallbackAnswer(question, history, signal) {
   const response = await fetch(`${API_URL}/ask`, {
     method: "POST",
     headers: {
@@ -124,6 +146,7 @@ async function fetchFallbackAnswer(question, signal) {
     },
     body: JSON.stringify({
       question,
+      history,
     }),
     signal,
   });
@@ -150,6 +173,7 @@ export default function Composer({
     startAssistantDraft,
     updateAssistantDraft,
     createChat,
+    chats,
     activeChatId,
     isLoading,
     setLoading,
@@ -187,6 +211,8 @@ export default function Composer({
 
       if (!targetChatId) return;
 
+      const history = getRecentChatHistory(chats, targetChatId);
+
       setLoading(true, targetChatId);
 
       const savedUserMessageId = await addUserMessage(
@@ -204,6 +230,7 @@ export default function Composer({
       try {
         await streamAnswer({
           question,
+          history,
           signal: abortController.signal,
           onChunk: (chunk) => {
             if (!chunk) return;
@@ -248,6 +275,7 @@ export default function Composer({
       if (shouldFallback) {
         const data = await fetchFallbackAnswer(
           question,
+          history,
           abortController.signal
         );
         streamedAnswer = data.answer ?? "No answer returned.";
