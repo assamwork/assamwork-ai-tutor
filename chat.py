@@ -34,8 +34,11 @@ STOPWORDS = {
     "are",
     "as",
     "at",
+    "about",
     "be",
     "by",
+    "can",
+    "could",
     "for",
     "from",
     "give",
@@ -46,9 +49,14 @@ STOPWORDS = {
     "it",
     "its",
     "me",
+    "make",
     "of",
     "on",
     "or",
+    "please",
+    "s",
+    "should",
+    "tell",
     "the",
     "this",
     "that",
@@ -61,6 +69,7 @@ STOPWORDS = {
     "which",
     "who",
     "why",
+    "would",
 }
 INTENT_WORDS = {
     "achievement",
@@ -207,6 +216,72 @@ def _important_query_terms(question: str):
         for token in _tokenize(question)
         if token not in INTENT_WORDS
     ]
+
+
+def _unique_terms(terms):
+    unique = []
+    seen = set()
+
+    for term in terms:
+        if term in seen:
+            continue
+
+        seen.add(term)
+        unique.append(term)
+
+    return unique
+
+
+def _is_definition_question(question: str):
+    normalized = question.lower().strip()
+
+    return normalized.startswith(
+        (
+            "who is",
+            "what is",
+            "who was",
+            "what was",
+            "what are",
+            "define",
+            "meaning of",
+        )
+    )
+
+
+def _has_definition_signal(question: str, document: str, query_terms):
+    unique_terms = _unique_terms(query_terms)
+
+    if len(unique_terms) != 1 or not _is_definition_question(question):
+        return False
+
+    term = re.escape(unique_terms[0])
+    text = re.sub(r"\s+", " ", (document or "").lower())
+    term_first_linking_words = (
+        "is",
+        "are",
+        "was",
+        "were",
+        "means",
+        "refers to",
+    )
+    term_second_linking_words = (
+        "defined as",
+        "known as",
+        "called",
+    )
+    term_first_pattern = "|".join(
+        re.escape(word)
+        for word in term_first_linking_words
+    )
+    term_second_pattern = "|".join(
+        re.escape(word)
+        for word in term_second_linking_words
+    )
+
+    return bool(
+        re.search(rf"\b{term}\b\s+(?:{term_first_pattern})\b", text)
+        or re.search(rf"\b(?:{term_second_pattern})\b[^.:\n]*\b{term}\b", text)
+    )
 
 
 def _is_greeting(question: str):
@@ -360,13 +435,14 @@ def _flatten_query_result(results, key):
 def _evaluate_retrieval_confidence(question: str, documents, distances=None):
     documents = documents or []
     distances = distances or []
-    important_terms = _important_query_terms(question)
+    important_terms = _unique_terms(_important_query_terms(question))
 
     if not documents:
         return {
             "mode": "gemini_fallback",
             "reason": "no_documents",
             "useful_chunks": 0,
+            "document_count": 0,
             "important_terms": important_terms,
         }
 
@@ -375,12 +451,15 @@ def _evaluate_retrieval_confidence(question: str, documents, distances=None):
             "mode": "gemini_fallback",
             "reason": "no_search_terms",
             "useful_chunks": 0,
+            "document_count": len(documents),
             "important_terms": important_terms,
         }
 
     useful_chunks = 0
     best_overlap = 0
     combined_terms = set()
+    full_match_chunks = 0
+    definition_chunks = 0
 
     for document in documents:
         document_terms = set(_tokenize(document or ""))
@@ -392,15 +471,23 @@ def _evaluate_retrieval_confidence(question: str, documents, distances=None):
             combined_terms.update(overlap)
             best_overlap = max(best_overlap, overlap_count)
 
+        if important_terms and all(term in document_terms for term in important_terms):
+            full_match_chunks += 1
+
+        if _has_definition_signal(question, document or "", important_terms):
+            definition_chunks += 1
+
     unique_term_count = len(set(important_terms))
-    required_terms = (
-        unique_term_count
-        if unique_term_count <= 2
-        else max(1, unique_term_count // 2)
+    supported_terms = sorted(combined_terms)
+    numeric_terms = [
+        term
+        for term in important_terms
+        if term.isdigit()
+    ]
+    numeric_terms_supported = all(
+        term in combined_terms
+        for term in numeric_terms
     )
-    enough_term_coverage = len(combined_terms) >= required_terms
-    focused_chunk_match = best_overlap >= required_terms
-    repeated_evidence = useful_chunks >= min(2, len(documents))
 
     distance_support = False
 
@@ -415,24 +502,81 @@ def _evaluate_retrieval_confidence(question: str, documents, distances=None):
         average_distance = sum(numeric_distances) / len(numeric_distances)
         distance_support = best_distance < average_distance
 
-    if (
-        enough_term_coverage
-        and focused_chunk_match
-        and (repeated_evidence or distance_support or len(documents) == 1)
-    ):
+    details = {
+        "useful_chunks": useful_chunks,
+        "document_count": len(documents),
+        "important_terms": important_terms,
+        "supported_terms": supported_terms,
+        "term_coverage": f"{len(combined_terms)}/{unique_term_count}",
+        "best_overlap": best_overlap,
+        "full_match_chunks": full_match_chunks,
+        "definition_chunks": definition_chunks,
+        "distance_support": distance_support,
+        "numeric_terms_supported": numeric_terms_supported,
+    }
+
+    if unique_term_count == 1 and not definition_chunks:
+        return {
+            "mode": "gemini_fallback",
+            "reason": "single_term_lacks_definition_signal",
+            **details,
+        }
+
+    if not numeric_terms_supported:
+        return {
+            "mode": "gemini_fallback",
+            "reason": "numeric_terms_not_supported",
+            **details,
+        }
+
+    if definition_chunks or full_match_chunks:
         return {
             "mode": "knowledge_base",
-            "reason": "query_terms_supported_by_retrieved_chunks",
-            "useful_chunks": useful_chunks,
-            "important_terms": important_terms,
+            "reason": "query_terms_supported_in_retrieved_chunks",
+            **details,
+        }
+
+    required_terms = max(2, unique_term_count - 1)
+    has_strong_partial_match = (
+        best_overlap >= required_terms
+        and len(combined_terms) >= required_terms
+        and (useful_chunks > 1 or distance_support)
+    )
+
+    if has_strong_partial_match:
+        return {
+            "mode": "knowledge_base",
+            "reason": "strong_partial_query_support",
+            **details,
         }
 
     return {
         "mode": "gemini_fallback",
         "reason": "retrieval_evidence_too_weak",
-        "useful_chunks": useful_chunks,
-        "important_terms": important_terms,
+        **details,
     }
+
+
+def _log_retrieval_confidence(question: str, confidence: dict, source_count: int):
+    logger.info(
+        (
+            "Retrieval confidence details: mode=%s reason=%s "
+            "documents=%s useful_chunks=%s term_coverage=%s "
+            "best_overlap=%s full_match_chunks=%s definition_chunks=%s "
+            "distance_support=%s candidate_sources=%s query=%s"
+        ),
+        confidence.get("mode", "unknown"),
+        confidence.get("reason", "unknown"),
+        confidence.get("document_count", 0),
+        confidence.get("useful_chunks", 0),
+        confidence.get("term_coverage", "0/0"),
+        confidence.get("best_overlap", 0),
+        confidence.get("full_match_chunks", 0),
+        confidence.get("definition_chunks", 0),
+        confidence.get("distance_support", False),
+        source_count,
+        question,
+    )
 
 
 def _retrieve_context(question: str):
@@ -447,13 +591,18 @@ def _retrieve_context(question: str):
             include=["documents", "metadatas", "distances"],
         )
     except KnowledgeBaseNotIndexedError:
+        confidence = {
+            "mode": "gemini_fallback",
+            "reason": "knowledge_base_not_indexed",
+            "document_count": 0,
+            "useful_chunks": 0,
+        }
+        _log_retrieval_confidence(question, confidence, 0)
+
         return {
             "context": "",
             "sources": [],
-            "confidence": {
-                "mode": "gemini_fallback",
-                "reason": "knowledge_base_not_indexed",
-            },
+            "confidence": confidence,
         }
     except Exception as error:
         _collection = None
@@ -464,13 +613,18 @@ def _retrieve_context(question: str):
             DATABASE_PATH,
             error,
         )
+        confidence = {
+            "mode": "gemini_fallback",
+            "reason": "knowledge_base_unavailable",
+            "document_count": 0,
+            "useful_chunks": 0,
+        }
+        _log_retrieval_confidence(question, confidence, 0)
+
         return {
             "context": "",
             "sources": [],
-            "confidence": {
-                "mode": "gemini_fallback",
-                "reason": "knowledge_base_unavailable",
-            },
+            "confidence": confidence,
         }
 
     documents = _flatten_query_result(results, "documents")
@@ -478,24 +632,38 @@ def _retrieve_context(question: str):
     distances = _flatten_query_result(results, "distances")
 
     if not documents:
+        confidence = {
+            "mode": "gemini_fallback",
+            "reason": "no_documents",
+            "document_count": 0,
+            "useful_chunks": 0,
+        }
+        _log_retrieval_confidence(question, confidence, 0)
+
         return {
             "context": "",
             "sources": [],
-            "confidence": {
-                "mode": "gemini_fallback",
-                "reason": "no_documents",
-            },
+            "confidence": confidence,
         }
 
+    candidate_sources = _sources_from_metadatas(metadatas)
     confidence = _evaluate_retrieval_confidence(
         question,
         documents,
         distances,
     )
+    _log_retrieval_confidence(question, confidence, len(candidate_sources))
+
+    if confidence.get("mode") != "knowledge_base":
+        return {
+            "context": "",
+            "sources": [],
+            "confidence": confidence,
+        }
 
     return {
         "context": "\n\n".join(documents),
-        "sources": _sources_from_metadatas(metadatas),
+        "sources": candidate_sources,
         "confidence": confidence,
     }
 
@@ -552,14 +720,13 @@ You are AssamWork AI Tutor.
 
 Answer ONLY using the study material below.
 
-If the answer is not found, reply exactly:
-
-I couldn't find this information in the uploaded AssamWork study materials.
+If the supplied study material is insufficient, say that the supplied
+material does not contain enough information to answer fully.
 
 Use only the supplied study material.
 If the answer cannot be fully derived from the supplied context, do not invent facts.
 Do not complete missing information from your own knowledge.
-Do not add any other text when the answer is not found.
+Do not add external facts when the supplied material is incomplete.
 
 Study Material:
 
@@ -631,9 +798,9 @@ Return JSON only with this structure:
   "revision": ["3-5 concise revision bullet points"]
 }}
 
-If the answer is not found, return:
+If the supplied study material is insufficient, return:
 {{
-  "answer": "I couldn't find this information in the uploaded AssamWork study materials.",
+  "answer": "The supplied AssamWork study material does not contain enough information to answer this fully.",
   "revision": []
 }}
 """
@@ -645,7 +812,8 @@ You are AssamWork AI Tutor.
 
 Using only the study material and completed answer below, create 3-5 concise revision bullet points.
 
-If the answer says the information was not found, return an empty revision list.
+If the answer says the supplied material does not contain enough information,
+return an empty revision list.
 
 Study Material:
 
@@ -719,16 +887,85 @@ def generate_general_answer(question: str, retrieval_query: str):
     return _fallback_answer_text(response.text)
 
 
+def _route_question(question: str, history=None):
+    if _is_greeting(question):
+        logger.info(
+            "Mode: Greeting Bypass. Source count returned: 0. Query: %s",
+            question,
+        )
+        return {
+            "mode": "greeting",
+            "answer": _greeting_answer(),
+            "revision": "",
+            "sources": [],
+            "confidence": None,
+            "retrieval_query": question,
+            "context": "",
+        }
+
+    rewrite = rewrite_question(question, history)
+
+    if rewrite["clarification"]:
+        logger.info(
+            "Mode: Clarification. Source count returned: 0. Query: %s",
+            question,
+        )
+        return {
+            "mode": "clarification",
+            "answer": rewrite["clarification"],
+            "revision": "",
+            "sources": [],
+            "confidence": None,
+            "retrieval_query": rewrite["query"],
+            "context": "",
+        }
+
+    retrieval_query = rewrite["query"]
+    rag = _retrieve_context(retrieval_query)
+    confidence = rag.get("confidence") or {}
+    mode = (
+        "knowledge_base"
+        if confidence.get("mode") == "knowledge_base"
+        else "gemini_fallback"
+    )
+    sources = rag["sources"] if mode == "knowledge_base" else []
+    source_count = len(sources)
+    log_mode = (
+        "Knowledge Base"
+        if mode == "knowledge_base"
+        else "Gemini Fallback"
+    )
+
+    logger.info(
+        "Mode: %s. Reason: %s. Source count returned: %s. Query: %s",
+        log_mode,
+        confidence.get("reason", "unknown"),
+        source_count,
+        retrieval_query,
+    )
+
+    return {
+        "mode": mode,
+        "answer": "",
+        "revision": "",
+        "sources": sources,
+        "confidence": confidence,
+        "retrieval_query": retrieval_query,
+        "context": rag["context"] if mode == "knowledge_base" else "",
+    }
+
+
 def stream_answer(
     question: str,
     history=None,
     stop_event: threading.Event | None = None,
 ):
-    if _is_greeting(question):
-        logger.info("Mode: Gemini Fallback (greeting)")
+    route = _route_question(question, history)
+
+    if route["mode"] in {"greeting", "clarification"}:
         yield {
             "type": "chunk",
-            "text": _greeting_answer(),
+            "text": route["answer"],
         }
         yield {
             "type": "metadata",
@@ -738,34 +975,10 @@ def stream_answer(
         }
         return
 
-    rewrite = rewrite_question(question, history)
+    retrieval_query = route["retrieval_query"]
+    confidence = route.get("confidence") or {}
 
-    if rewrite["clarification"]:
-        yield {
-            "type": "chunk",
-            "text": rewrite["clarification"],
-        }
-        yield {
-            "type": "metadata",
-            "sources": [],
-            "revision": "",
-            "confidence": None,
-        }
-        return
-
-    retrieval_query = rewrite["query"]
-    rag = _retrieve_context(retrieval_query)
-
-    context = rag["context"]
-    confidence = rag.get("confidence") or {}
-    mode = confidence.get("mode")
-
-    if mode != "knowledge_base":
-        logger.info(
-            "Mode: Gemini Fallback. Reason: %s. Query: %s",
-            confidence.get("reason", "unknown"),
-            retrieval_query,
-        )
+    if route["mode"] == "gemini_fallback":
         answer_parts = []
 
         try:
@@ -814,13 +1027,8 @@ def stream_answer(
 
         return
 
-    logger.info(
-        "Mode: Knowledge Base. Reason: %s. Useful chunks: %s. Query: %s",
-        confidence.get("reason", "unknown"),
-        confidence.get("useful_chunks", 0),
-        retrieval_query,
-    )
-    sources = rag["sources"]
+    context = route["context"]
+    sources = route["sources"]
     answer_parts = []
 
     try:
@@ -918,53 +1126,29 @@ def get_collection():
 
 
 def ask_question(question: str, history=None):
-    if _is_greeting(question):
-        logger.info("Mode: Gemini Fallback (greeting)")
+    route = _route_question(question, history)
+
+    if route["mode"] in {"greeting", "clarification"}:
         return {
-            "answer": _greeting_answer(),
+            "answer": route["answer"],
             "revision": "",
             "sources": [],
         }
 
-    rewrite = rewrite_question(question, history)
+    retrieval_query = route["retrieval_query"]
 
-    if rewrite["clarification"]:
-        return {
-            "answer": rewrite["clarification"],
-            "revision": "",
-            "sources": [],
-        }
-
-    retrieval_query = rewrite["query"]
-    rag = _retrieve_context(retrieval_query)
-
-    confidence = rag.get("confidence") or {}
-
-    if confidence.get("mode") != "knowledge_base":
-        logger.info(
-            "Mode: Gemini Fallback. Reason: %s. Query: %s",
-            confidence.get("reason", "unknown"),
-            retrieval_query,
-        )
-
+    if route["mode"] == "gemini_fallback":
         return {
             "answer": generate_general_answer(question, retrieval_query),
             "revision": "",
             "sources": [],
         }
 
-    logger.info(
-        "Mode: Knowledge Base. Reason: %s. Useful chunks: %s. Query: %s",
-        confidence.get("reason", "unknown"),
-        confidence.get("useful_chunks", 0),
-        retrieval_query,
-    )
-
     response = get_client().models.generate_content(
         model="gemini-2.5-flash",
         contents=_structured_prompt(
             question,
-            rag["context"],
+            route["context"],
             retrieval_query,
         ),
         config=_json_config(_answer_schema()),
@@ -974,5 +1158,5 @@ def ask_question(question: str, history=None):
     return {
         "answer": structured_answer["answer"],
         "revision": structured_answer["revision"],
-        "sources": rag["sources"],
+        "sources": route["sources"],
     }
