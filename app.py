@@ -4,8 +4,11 @@ import logging
 import asyncio
 import json
 import uuid
+import inspect
 from datetime import datetime, timezone
+from pathlib import Path
 
+import chat as chat_module
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi import (
@@ -56,6 +59,38 @@ indexing_state = {
     "lastSuccessfulAt": None,
     "lastResult": None,
 }
+
+
+def _callable_location(function):
+    return (
+        f"{function.__module__}."
+        f"{getattr(function, '__name__', '<unknown>')} "
+        f"@ {inspect.getsourcefile(function)}:"
+        f"{inspect.getsourcelines(function)[1]}"
+    )
+
+
+@app.on_event("startup")
+async def log_runtime_paths():
+    logger.info("Runtime path audit: cwd=%s", os.getcwd())
+    logger.info("Runtime path audit: app.__file__=%s", __file__)
+    logger.info("Runtime path audit: app.py absolute=%s", Path(__file__).resolve())
+    logger.info(
+        "Runtime path audit: chat.__file__=%s",
+        getattr(chat_module, "__file__", None),
+    )
+    logger.info(
+        "Runtime path audit: chat.py absolute=%s",
+        Path(getattr(chat_module, "__file__", "")).resolve(),
+    )
+    logger.info(
+        "Runtime path audit: imported ask_question=%s",
+        _callable_location(ask_question),
+    )
+    logger.info(
+        "Runtime path audit: imported stream_answer=%s",
+        _callable_location(stream_answer),
+    )
 
 app.add_middleware(
     CORSMiddleware,
@@ -178,6 +213,11 @@ async def ask(question: Question):
         question.question,
         len(history),
     )
+    logger.info(
+        "[trace:%s] POST /ask will call %s",
+        request_id,
+        _callable_location(ask_question),
+    )
     result = ask_question(
         question.question,
         history,
@@ -216,6 +256,11 @@ async def ask_stream(question: Question, request: Request):
         request_id,
         question.question,
         len(history),
+    )
+    logger.info(
+        "[trace:%s] POST /ask/stream will call %s",
+        request_id,
+        _callable_location(stream_answer),
     )
 
     async def event_generator():
