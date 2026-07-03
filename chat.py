@@ -246,61 +246,107 @@ EXAM_AUDIENCE = (
     "APSC, ADRE, Assam Police, Assam TET, Grade 3, Grade 4, "
     "Guwahati High Court, Class 10, and Class 12"
 )
+UNIVERSAL_EXAM_STRUCTURE = """
+Use this universal Knowledge Base answer structure:
+
+## Introduction
+- Maximum 2-3 lines.
+- Explain the topic directly.
+- No unnecessary history.
+
+## Key Points
+- Short bullets.
+- Include dates, places, people, provisions, features, and keywords when present.
+- Avoid paragraph blocks.
+
+## Detailed Explanation
+- Include only when the question needs it.
+- Use headings, bullets, tables, or examples.
+- Never write one huge paragraph.
+
+## Exam Highlights
+- Very important section.
+- Include high-yield facts supported by the retrieved material.
+- Mention important years, related personalities, related events, map facts,
+  articles, institutions, or features only when present in the context.
+- Do not claim something is frequently asked in an exam unless the material
+  itself supports that.
+
+## Quick Revision
+- 5-10 one-line bullets.
+- Last-minute notes only.
+- Do not copy sentences from the answer.
+- Prefer names, years, places, articles, battles, features, and keywords.
+
+## Memory Tricks
+- Include only when the retrieved material directly supports a safe memory cue.
+- Do not invent mnemonics.
+
+## PYQ / Exam Relevance
+- Include only when supported by retrieved material.
+- Never hallucinate exam frequency.
+"""
 EXAM_TEMPLATES = {
     "Person": (
         "## Introduction\n"
-        "- 2-3 concise lines.\n\n"
+        "- 2-3 direct lines.\n\n"
         "## Key Facts\n"
         "- Born\n"
         "- Position\n"
         "- Known For\n"
-        "- Important Events\n\n"
-        "## Contributions\n"
-        "- High-yield contributions only.\n\n"
+        "- Important Events / Years\n\n"
+        "## Major Contributions\n"
+        "- High-yield contributions from the context.\n\n"
+        "## Important Years\n"
+        "- Include years only if present.\n\n"
         "## Exam Highlights\n"
-        "- Frequently asked facts from the material.\n\n"
+        "- Scoring facts from the material.\n\n"
         "## Quick Revision\n"
-        "- 5 short memory bullets."
+        "- 5-10 one-line facts."
     ),
     "Constitution Article": (
         "## Definition\n"
-        "## Key Provisions\n"
-        "## Important Judgments\n"
+        "## Features\n"
+        "## Importance\n"
         "## Exceptions\n"
-        "## Exam Facts\n"
+        "## Landmark Cases\n"
+        "## Exam Highlights\n"
         "## Quick Revision"
     ),
     "Scheme": (
-        "## Launch Year\n"
+        "## Launch\n"
         "## Ministry\n"
-        "## Objective\n"
+        "## Objectives\n"
         "## Beneficiaries\n"
         "## Features\n"
-        "## Latest Updates\n"
-        "## Exam Facts"
+        "## Exam Highlights\n"
+        "## Quick Revision"
     ),
     "Battle": (
         "## Background\n"
-        "## Causes\n"
         "## Timeline\n"
+        "## Leaders\n"
         "## Outcome\n"
         "## Importance\n"
-        "## Exam Highlights"
+        "## Exam Highlights\n"
+        "## Quick Revision"
     ),
     "Movement": (
         "## Background\n"
-        "## Causes\n"
         "## Timeline\n"
+        "## Leaders\n"
         "## Outcome\n"
         "## Importance\n"
-        "## Exam Highlights"
+        "## Exam Highlights\n"
+        "## Quick Revision"
     ),
     "Geography": (
         "## Location\n"
         "## Features\n"
         "## Importance\n"
         "## Map Facts\n"
-        "## Exam Highlights"
+        "## Exam Highlights\n"
+        "## Quick Revision"
     ),
     "River": (
         "## Location / Course\n"
@@ -308,41 +354,44 @@ EXAM_TEMPLATES = {
         "## Tributaries / Associated Places\n"
         "## Importance\n"
         "## Map Facts\n"
-        "## Exam Highlights"
+        "## Exam Highlights\n"
+        "## Quick Revision"
     ),
     "Mountain": (
         "## Location\n"
         "## Features\n"
         "## Importance\n"
         "## Map Facts\n"
-        "## Exam Highlights"
+        "## Exam Highlights\n"
+        "## Quick Revision"
     ),
     "Science": (
         "## Definition\n"
         "## Working Principle\n"
         "## Applications\n"
         "## Important Facts\n"
-        "## Memory Tips"
+        "## Quick Revision"
     ),
     "Current Affairs": (
-        "## What Happened\n"
+        "## Event\n"
         "## Background\n"
-        "## Importance\n"
+        "## Why Important\n"
         "## Exam Relevance\n"
-        "## Possible MCQ Points"
+        "## Quick Revision"
     ),
     "Environment": (
-        "## Definition / Location\n"
+        "## Location\n"
         "## Key Features\n"
-        "## Ecological Importance\n"
-        "## Conservation Facts\n"
-        "## Exam Highlights"
+        "## Importance\n"
+        "## Map / Ramsar Facts\n"
+        "## Exam Highlights\n"
+        "## Quick Revision"
     ),
     "Economy": (
         "## Meaning\n"
         "## Key Points\n"
         "## Data / Institutions\n"
-        "## Exam Facts\n"
+        "## Exam Highlights\n"
         "## Quick Revision"
     ),
     "Organization": (
@@ -350,23 +399,29 @@ EXAM_TEMPLATES = {
         "## Formation / Headquarters\n"
         "## Objectives\n"
         "## Functions\n"
-        "## Exam Facts"
+        "## Exam Highlights\n"
+        "## Quick Revision"
     ),
     "History": (
         "## Background\n"
         "## Key Facts\n"
         "## Timeline\n"
         "## Importance\n"
-        "## Exam Highlights"
+        "## Exam Highlights\n"
+        "## Quick Revision"
     ),
     "Mathematics": (
         "## Formula / Concept\n"
         "## Steps\n"
         "## Example\n"
-        "## Shortcut / Exam Tip"
+        "## Shortcut / Exam Tip\n"
+        "## Quick Revision"
     ),
     "General": (
+        "## Introduction\n"
         "## Key Points\n"
+        "## Detailed Explanation\n"
+        "## Exam Highlights\n"
         "## Exam Relevance\n"
         "## Quick Revision"
     ),
@@ -1131,7 +1186,24 @@ def _answer_length_instruction(question: str, question_type: str):
             "The user wants exam practice. If the retrieved material supports "
             "it, format as numbered multiple-choice questions with options and "
             "mark the correct answer. Do not create questions from unsupported "
-            "facts."
+            "facts. Keep explanations brief."
+        )
+
+    if any(
+        keyword in normalized
+        for keyword in (
+            "detailed notes",
+            "long answer",
+            "full notes",
+            "comprehensive",
+            "essay",
+            "elaborate",
+        )
+    ):
+        return (
+            "This is a long answer request. Give detailed but scan-friendly "
+            "exam notes and never exceed 800 words. Use headings, bullets, "
+            "tables, and examples only when supported by the material."
         )
 
     if any(
@@ -1140,7 +1212,6 @@ def _answer_length_instruction(question: str, question_type: str):
             "explain",
             "describe",
             "discuss",
-            "elaborate",
             "detail",
             "achievements",
             "achievement",
@@ -1148,20 +1219,22 @@ def _answer_length_instruction(question: str, question_type: str):
         )
     ):
         return (
-            "This is a medium or long answer request. Give structured exam "
+            "This is a medium or long answer request. Use 400-600 words for "
+            "normal detail and never exceed 800 words. Give structured exam "
             "notes with concise headings, bullets, and tables only when useful."
         )
 
     if question_type != "General":
         return (
-            "This is a short exam question. Use the selected template, but keep "
-            "each section tight and avoid long paragraphs."
+            "This is a simple exam question. Keep the answer under 250 words. "
+            "Use the selected template, but keep each section tight and avoid "
+            "long paragraphs."
         )
 
     if normalized.startswith(("who is", "what is", "who was", "what was")):
         return (
             "This is a short question. Answer in 2-5 high-yield bullets. "
-            "Do not over-explain."
+            "Stay under 250 words. Do not over-explain."
         )
 
     return (
@@ -1176,15 +1249,24 @@ def _exam_template_instruction(question_type: str):
     return f"""
 Detected Question Type: {question_type}
 
-Use this exam-oriented answer template when the retrieved material supports it:
+Universal Structure:
+
+{UNIVERSAL_EXAM_STRUCTURE}
+
+Question-Type Template:
+
+Use this template when the retrieved material supports it:
 
 {template}
 
 Template rules:
 - Omit any section whose facts are not present in the supplied study material.
 - Never fill missing fields from outside knowledge.
-- Prefer compact Markdown headings, bullets, and small tables where appropriate.
+- Prefer compact Markdown headings, bullets, spacing, and small tables where appropriate.
 - Avoid Wikipedia-style paragraphs.
+- Avoid repeated information.
+- Never produce walls of text.
+- Use ## and ### headings, bullets, tables, and restrained bold.
 - Add labels such as Exam Tip, Frequently Asked, Remember, Important Year,
   Mnemonic, or PYQ Hint only when the content is directly supported by the
   supplied material.
@@ -1203,6 +1285,8 @@ You are an experienced faculty member for {EXAM_AUDIENCE}.
 Your goal is to help the student score marks.
 Do not behave like a general chatbot.
 Do not sound like Wikipedia.
+If a student has only 2 minutes to revise this topic before the exam, the
+answer should help immediately.
 
 Answer ONLY using the study material below.
 
@@ -1234,7 +1318,9 @@ Answer Length:
 
 {_answer_length_instruction(question, question_type)}
 
-Write in revision-friendly exam language. Preserve source grounding.
+Write premium competitive exam notes, not a generic AI answer.
+Use short bullets instead of paragraphs whenever possible.
+Preserve source grounding.
 """
 
 
@@ -1293,7 +1379,7 @@ def _structured_prompt(
 Return JSON only with this structure:
 {{
   "answer": "exam-oriented answer text",
-  "revision": ["3-5 high-yield quick revision facts"]
+  "revision": ["5-10 independent one-line last-minute revision facts"]
 }}
 
 If the supplied study material is insufficient, return:
@@ -1308,11 +1394,14 @@ def _revision_prompt(question: str, context: str, answer: str):
     return f"""
 You are AssamWork AI Tutor in Competitive Exam Teacher Mode.
 
-Using only the study material and completed answer below, create 3-5 high-yield
-quick revision bullets for competitive exam students.
+Using only the study material and completed answer below, create 5-10 high-yield
+one-line quick revision bullets for competitive exam students.
 
 Prefer years, names, places, battles, articles, institutions, features, and
 frequently asked facts when they are present.
+
+The revision must not copy answer sentences.
+It must be independently useful as 20-second last-minute notes.
 
 If the answer says the supplied material does not contain enough information,
 return an empty revision list.
@@ -1331,7 +1420,7 @@ Completed Answer:
 
 Return JSON only with this structure:
 {{
-  "revision": ["high-yield quick revision fact"]
+  "revision": ["independent one-line last-minute revision fact"]
 }}
 """
 
