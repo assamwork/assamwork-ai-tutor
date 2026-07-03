@@ -89,6 +89,9 @@ INTENT_WORDS = {
     "revision",
     "summarize",
 }
+RETRIEVAL_QUERY_ALIASES = (
+    (re.compile(r"\bdipor\s+beel\b", re.IGNORECASE), "Deepor Beel"),
+)
 
 
 class KnowledgeBaseNotIndexedError(RuntimeError):
@@ -100,7 +103,32 @@ def _trace(trace_id: str | None, message: str, *args):
     logger.info("[trace:%s] " + message, trace_label, *args)
 
 
-def _metadata_page(metadata: dict):
+def _metadata_pdf_page_index(metadata: dict):
+    value = metadata.get("pdf_page_index")
+
+    if value in (None, ""):
+        value = metadata.get("page_index")
+
+    if value in (None, ""):
+        return None
+
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return value
+
+
+def _metadata_display_page(metadata: dict):
+    display_page = metadata.get("display_page")
+
+    if display_page not in (None, ""):
+        return display_page
+
+    source_page_label = metadata.get("source_page_label")
+
+    if source_page_label not in (None, ""):
+        return source_page_label
+
     for key in (
         "page",
         "page_number",
@@ -115,13 +143,13 @@ def _metadata_page(metadata: dict):
         if value not in (None, ""):
             return value
 
-    page_index = metadata.get("page_index")
+    pdf_page_index = _metadata_pdf_page_index(metadata)
 
-    if page_index not in (None, ""):
+    if pdf_page_index not in (None, ""):
         try:
-            return int(page_index) + 1
+            return int(pdf_page_index) + 1
         except (TypeError, ValueError):
-            return page_index
+            return pdf_page_index
 
     return None
 
@@ -310,6 +338,15 @@ def _greeting_answer():
     )
 
 
+def _normalize_retrieval_query(query: str):
+    normalized_query = query
+
+    for pattern, replacement in RETRIEVAL_QUERY_ALIASES:
+        normalized_query = pattern.sub(replacement, normalized_query)
+
+    return normalized_query
+
+
 def _needs_conversation_context(question: str):
     return bool(
         re.search(
@@ -428,21 +465,32 @@ def rewrite_question(question: str, history=None, trace_id: str | None = None):
 
 def _sources_from_metadatas(metadatas):
     sources = []
+    seen = set()
 
     for item in metadatas:
         item = item or {}
-        page = _metadata_page(item)
+        display_page = _metadata_display_page(item)
+        source_key = (
+            item.get("subject"),
+            item.get("book"),
+            display_page,
+        )
+
+        if source_key in seen:
+            continue
+
+        seen.add(source_key)
         source = {
             "subject": item.get("subject"),
             "book": item.get("book"),
-            "page": page,
-            "page_number": page,
-            "source_page": item.get("source_page") or page,
-            "pdf_page": item.get("pdf_page") or page,
+            "filename": item.get("filename") or item.get("book"),
+            "chunk_id": item.get("chunk_id"),
+            "pdf_page_index": _metadata_pdf_page_index(item),
+            "display_page": display_page,
+            "source_page_label": item.get("source_page_label") or "",
         }
 
-        if source not in sources:
-            sources.append(source)
+        sources.append(source)
 
     return sources
 
@@ -623,6 +671,7 @@ def _distance_score(distance):
 
 def _log_retrieved_chunks(
     question: str,
+    ids,
     documents,
     metadatas,
     distances,
@@ -638,18 +687,26 @@ def _log_retrieved_chunks(
     for index, document in enumerate(documents or []):
         metadata = (metadatas or [{}])[index] if index < len(metadatas or []) else {}
         distance = (distances or [None])[index] if index < len(distances or []) else None
-        preview = re.sub(r"\s+", " ", document or "").strip()[:180]
+        chunk_id = (
+            metadata.get("chunk_id")
+            or ((ids or [None])[index] if index < len(ids or []) else None)
+        )
+        preview = re.sub(r"\s+", " ", document or "").strip()[:120]
         _trace(
             trace_id,
             (
                 "retrieval chunk index=%s raw_distance=%r similarity_score=%r "
-                "book=%r page=%r preview=%r"
+                "book=%r chunk_id=%r pdf_page_index=%r display_page=%r "
+                "source_page_label=%r preview=%r"
             ),
             index,
             distance,
             _distance_score(distance),
             metadata.get("book"),
-            _metadata_page(metadata or {}),
+            chunk_id,
+            _metadata_pdf_page_index(metadata or {}),
+            _metadata_display_page(metadata or {}),
+            (metadata or {}).get("source_page_label"),
             preview,
         )
 
@@ -709,8 +766,10 @@ def _retrieve_context(question: str, trace_id: str | None = None):
     documents = _flatten_query_result(results, "documents")
     metadatas = _flatten_query_result(results, "metadatas")
     distances = _flatten_query_result(results, "distances")
+    ids = _flatten_query_result(results, "ids")
     _log_retrieved_chunks(
         question,
+        ids,
         documents,
         metadatas,
         distances,
@@ -1044,7 +1103,14 @@ def _route_question(question: str, history=None, trace_id: str | None = None):
             "context": "",
         }
 
-    retrieval_query = rewrite["query"]
+    retrieval_query = _normalize_retrieval_query(rewrite["query"])
+    if retrieval_query != rewrite["query"]:
+        _trace(
+            trace_id,
+            "route normalized retrieval_query from %r to %r",
+            rewrite["query"],
+            retrieval_query,
+        )
     _trace(trace_id, "route retrieval_query=%r", retrieval_query)
     rag = _retrieve_context(retrieval_query, trace_id)
     confidence = rag.get("confidence") or {}

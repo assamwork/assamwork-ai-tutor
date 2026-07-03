@@ -37,16 +37,28 @@ def _pdf_files():
 
 def _extract_pages(pdf: Path):
     reader = PdfReader(pdf)
+    page_labels = list(getattr(reader, "page_labels", []) or [])
     pages = []
 
     for index, page in enumerate(reader.pages):
         page_text = page.extract_text()
 
         if page_text:
+            source_page_label = (
+                str(page_labels[index]).strip()
+                if index < len(page_labels) and page_labels[index]
+                else ""
+            )
+            display_page = (
+                int(source_page_label)
+                if source_page_label.isdigit()
+                else source_page_label or index + 1
+            )
             pages.append(
                 {
-                    "page": index + 1,
-                    "page_index": index,
+                    "pdf_page_index": index,
+                    "display_page": display_page,
+                    "source_page_label": source_page_label,
                     "text": page_text,
                 }
             )
@@ -54,8 +66,31 @@ def _extract_pages(pdf: Path):
     return pages
 
 
-def _chunk_id(subject: str, book: str, page: int, index: int):
-    return f"{subject}_{Path(book).stem}_p{page}_{index}"
+def _chunk_id(subject: str, book: str, pdf_page_index: int, index: int):
+    return f"{subject}_{Path(book).stem}_pi{pdf_page_index}_c{index}"
+
+
+def _delete_missing_pdf_chunks(collection, pdf_files):
+    available_books = {
+        (pdf.parent.name, pdf.name)
+        for pdf in pdf_files
+    }
+    existing = collection.get(include=["metadatas"])
+    stale_ids = []
+
+    for chunk_id, metadata in zip(
+        existing.get("ids") or [],
+        existing.get("metadatas") or [],
+    ):
+        metadata = metadata or {}
+
+        if (metadata.get("subject"), metadata.get("book")) not in available_books:
+            stale_ids.append(chunk_id)
+
+    for start in range(0, len(stale_ids), UPSERT_BATCH_SIZE):
+        collection.delete(ids=stale_ids[start:start + UPSERT_BATCH_SIZE])
+
+    return len(stale_ids)
 
 
 def ingest_library():
@@ -81,6 +116,7 @@ def ingest_library():
     pdf_files = _pdf_files()
     books_processed = 0
     chunks_added = 0
+    chunks_deleted = _delete_missing_pdf_chunks(collection, pdf_files)
     errors = []
 
     for pdf in pdf_files:
@@ -96,8 +132,9 @@ def ingest_library():
                     chunks.append(
                         {
                             "text": chunk,
-                            "page": page["page"],
-                            "page_index": page["page_index"],
+                            "pdf_page_index": page["pdf_page_index"],
+                            "display_page": page["display_page"],
+                            "source_page_label": page["source_page_label"],
                         }
                     )
 
@@ -105,7 +142,7 @@ def ingest_library():
                 raise ValueError("No extractable text was found.")
 
             ids = [
-                _chunk_id(subject, book, chunk["page"], index)
+                _chunk_id(subject, book, chunk["pdf_page_index"], index)
                 for index, chunk in enumerate(chunks)
             ]
             documents = [chunk["text"] for chunk in chunks]
@@ -113,13 +150,13 @@ def ingest_library():
                 {
                     "subject": subject,
                     "book": book,
-                    "page": chunk["page"],
-                    "page_number": chunk["page"],
-                    "pdf_page": chunk["page"],
-                    "source_page": chunk["page"],
-                    "page_index": chunk["page_index"],
+                    "filename": book,
+                    "chunk_id": ids[index],
+                    "pdf_page_index": chunk["pdf_page_index"],
+                    "display_page": chunk["display_page"],
+                    "source_page_label": chunk["source_page_label"],
                 }
-                for chunk in chunks
+                for index, chunk in enumerate(chunks)
             ]
 
             for start in range(0, len(chunks), UPSERT_BATCH_SIZE):
@@ -181,6 +218,7 @@ def ingest_library():
         "message": message,
         "booksProcessed": books_processed,
         "chunksAdded": chunks_added,
+        "chunksDeleted": chunks_deleted,
         "errors": errors,
     }
 
@@ -192,6 +230,7 @@ def main():
     print(result["message"])
     print(f"Books processed : {result['booksProcessed']}")
     print(f"Chunks indexed  : {result['chunksAdded']}")
+    print(f"Chunks deleted  : {result['chunksDeleted']}")
 
     if result["errors"]:
         print("Errors:")

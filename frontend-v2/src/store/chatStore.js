@@ -32,17 +32,22 @@ function normalizeMessage(message) {
     role: message.role || "assistant",
     content: message.content || "",
     revision: message.revision || "",
-    sources: Array.isArray(message.sources) ? message.sources : [],
+    sources: normalizeSources(
+      Array.isArray(message.sources) ? message.sources : []
+    ),
     createdAt: toLocalDate(message.createdAt),
   };
 }
 
 function normalizeSources(rawSources = []) {
-  return rawSources.map((source) => ({
-    subject: source?.subject ?? null,
-    book: source?.book ?? null,
-    bookName: source?.bookName ?? null,
-    page:
+  return rawSources.map((source) => {
+    const pdfPageIndex =
+      source?.pdf_page_index ??
+      source?.pdfPageIndex ??
+      source?.page_index ??
+      source?.pageIndex ??
+      null;
+    const legacyPage =
       source?.page ??
       source?.pageNumber ??
       source?.page_number ??
@@ -50,17 +55,26 @@ function normalizeSources(rawSources = []) {
       source?.pdf_page ??
       source?.pageNo ??
       source?.page_no ??
-      source?.page_index ??
-      null,
-    page_number: source?.page_number ?? source?.pageNumber ?? null,
-    pageNumber: source?.pageNumber ?? source?.page_number ?? null,
-    source_page: source?.source_page ?? null,
-    pdf_page: source?.pdf_page ?? null,
-    page_index:
-      source?.page_index ??
-      source?.pageIndex ??
-      null,
-  }));
+      null;
+    const displayPage =
+      source?.display_page ??
+      source?.displayPage ??
+      source?.source_page_label ??
+      legacyPage ??
+      (pdfPageIndex !== null && pdfPageIndex !== undefined
+        ? Number(pdfPageIndex) + 1
+        : null);
+
+    return {
+      subject: source?.subject ?? null,
+      book: source?.book ?? source?.bookName ?? source?.filename ?? null,
+      filename: source?.filename ?? source?.book ?? source?.bookName ?? null,
+      chunk_id: source?.chunk_id ?? source?.chunkId ?? null,
+      pdf_page_index: pdfPageIndex,
+      display_page: displayPage,
+      source_page_label: source?.source_page_label ?? source?.sourcePageLabel ?? "",
+    };
+  });
 }
 
 const useChatStore = create((set, get) => ({

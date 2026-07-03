@@ -2,7 +2,7 @@ import { useState } from "react";
 import { BookOpenCheck, ChevronDown } from "lucide-react";
 
 function getSourceBook(source) {
-  return source?.book || source?.bookName || "Book not specified";
+  return source?.book || source?.filename || source?.bookName || "Book not specified";
 }
 
 function normalizePageValue(value, isZeroIndexed = false) {
@@ -23,6 +23,9 @@ function normalizePageValue(value, isZeroIndexed = false) {
 
 function getSourcePage(source) {
   const page =
+    source?.display_page ??
+    source?.displayPage ??
+    source?.source_page_label ??
     source?.page ??
     source?.pageNumber ??
     source?.page_number ??
@@ -34,7 +37,10 @@ function getSourcePage(source) {
   const normalizedPage =
     normalizePageValue(page) ??
     normalizePageValue(
-      source?.page_index ?? source?.pageIndex,
+      source?.pdf_page_index ??
+        source?.pdfPageIndex ??
+        source?.page_index ??
+        source?.pageIndex,
       true
     );
 
