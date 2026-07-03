@@ -621,14 +621,14 @@ export default function LibraryPage() {
           </div>
         </section>
 
-        <section className="mt-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <section className="mt-5 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-end">
             <form
               onSubmit={handleUpload}
-              className="grid min-w-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_220px_160px]"
+              className="grid min-w-0 flex-1 gap-3 md:grid-cols-[minmax(0,1fr)_220px_170px]"
             >
               <label className="block min-w-0">
-                <span className="text-xs font-bold text-slate-700">Upload PDF</span>
+                <span className="text-xs font-bold text-slate-700">Choose File</span>
                 <input
                   key={fileInputKey}
                   type="file"
@@ -637,7 +637,7 @@ export default function LibraryPage() {
                     setSelectedFile(event.target.files?.[0] || null)
                   }
                   disabled={uploading || indexing}
-                  className="mt-2 block w-full min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-blue-600 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-white hover:file:bg-blue-700 disabled:opacity-60"
+                  className="mt-2 block h-12 w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 transition file:mr-3 file:rounded-lg file:border-0 file:bg-blue-600 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-white hover:file:bg-blue-700 focus:border-blue-400 focus:outline-none focus:ring-0 focus:shadow-[0_0_0_3px_rgba(37,99,235,0.08)] disabled:opacity-60"
                 />
               </label>
 
@@ -647,7 +647,7 @@ export default function LibraryPage() {
                   value={selectedSubject}
                   onChange={(event) => setSelectedSubject(event.target.value)}
                   disabled={uploading || indexing}
-                  className="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-blue-500 disabled:opacity-60"
+                  className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 transition focus:border-blue-400 focus:outline-none focus:ring-0 focus:shadow-[0_0_0_3px_rgba(37,99,235,0.08)] disabled:opacity-60"
                 >
                   {DEFAULT_CATEGORIES.map((category) => (
                     <option key={category} value={category}>
@@ -661,7 +661,7 @@ export default function LibraryPage() {
               <button
                 type="submit"
                 disabled={uploading || indexing}
-                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 lg:mt-6"
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-bold text-white shadow-sm shadow-blue-600/20 transition hover:bg-blue-700 hover:shadow-md hover:shadow-blue-600/20 disabled:cursor-not-allowed disabled:opacity-60 md:mt-6"
               >
                 {uploading ? (
                   <RefreshCw size={16} className="animate-spin" />
@@ -679,7 +679,7 @@ export default function LibraryPage() {
                   type="button"
                   onClick={() => handleReindex({ force: false })}
                   disabled={indexing || uploading}
-                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-violet-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-bold text-white shadow-sm shadow-violet-600/15 transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {indexing ? (
                     <RefreshCw size={15} className="animate-spin" />
@@ -692,7 +692,7 @@ export default function LibraryPage() {
                   type="button"
                   onClick={() => handleReindex({ force: true })}
                   disabled={indexing || uploading}
-                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <RefreshCw size={15} />
                   Re-index All
@@ -700,12 +700,13 @@ export default function LibraryPage() {
                 <button
                   type="button"
                   disabled
-                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-400"
+                  title="AI Analytics dashboard will be available in the next update."
+                  className="inline-flex h-12 cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-400"
                 >
                   <BarChart3 size={15} />
-                  Analytics
+                  Coming Soon
                 </button>
-                <span className="flex min-h-10 items-center justify-center rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+                <span className="flex h-12 items-center justify-center rounded-xl bg-slate-50 px-4 text-xs font-semibold text-slate-500">
                   {systemStatus?.rag || "status unknown"}
                 </span>
               </div>
@@ -724,7 +725,7 @@ export default function LibraryPage() {
                 placeholder="Enter a subject/category"
                 maxLength={80}
                 disabled={uploading || indexing}
-                className="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+                className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm transition placeholder:text-slate-400 focus:border-blue-400 focus:outline-none focus:ring-0 focus:shadow-[0_0_0_3px_rgba(37,99,235,0.08)]"
               />
             </label>
           )}
@@ -777,7 +778,7 @@ export default function LibraryPage() {
 
           <div className="min-w-0 rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-200 p-3">
-              <label className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 focus-within:border-blue-500 focus-within:bg-white">
+              <label className="flex h-12 items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 transition focus-within:border-blue-400 focus-within:bg-white focus-within:shadow-[0_0_0_3px_rgba(37,99,235,0.08)]">
                 <Search size={17} className="shrink-0 text-slate-400" />
                 <input
                   type="search"
@@ -785,7 +786,7 @@ export default function LibraryPage() {
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Search subject, filename, book title, or indexed content"
                   aria-label="Search knowledge library"
-                  className="min-w-0 flex-1 bg-transparent py-2.5 text-sm outline-none"
+                  className="min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none ring-0 placeholder:text-slate-400 focus:outline-none focus:ring-0"
                 />
               </label>
             </div>
@@ -863,7 +864,7 @@ export default function LibraryPage() {
                       {visible && (
                         <div className="border-t border-slate-100 bg-slate-50/70 px-3 pb-3">
                           <div className="py-2">
-                            <label className="flex max-w-md items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5">
+                            <label className="flex h-10 max-w-md items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 transition focus-within:border-blue-400 focus-within:shadow-[0_0_0_3px_rgba(37,99,235,0.08)]">
                               <Search size={14} className="text-slate-400" />
                               <input
                                 type="search"
@@ -875,7 +876,7 @@ export default function LibraryPage() {
                                   }))
                                 }
                                 placeholder={`Search in ${subject}`}
-                                className="min-w-0 flex-1 bg-transparent py-2 text-xs outline-none"
+                                className="min-w-0 flex-1 bg-transparent text-xs text-slate-700 outline-none ring-0 placeholder:text-slate-400 focus:outline-none focus:ring-0"
                               />
                             </label>
                           </div>
