@@ -25,7 +25,6 @@ import {
   deleteBook,
   getLibrary,
   getReindexStatus,
-  getSystemStatus,
   reindexLibrary,
   uploadBook,
 } from "../services/libraryService";
@@ -177,7 +176,6 @@ export default function LibraryPage() {
   const [deleteMessage, setDeleteMessage] = useState(null);
   const [indexing, setIndexing] = useState(false);
   const [indexMessage, setIndexMessage] = useState(null);
-  const [systemStatus, setSystemStatus] = useState(null);
   const [expandedSubjects, setExpandedSubjects] = useState(() => new Set());
   const [expandedBookKey, setExpandedBookKey] = useState("");
   const [subjectQueries, setSubjectQueries] = useState({});
@@ -370,11 +368,8 @@ export default function LibraryPage() {
       if (requestRunning) return;
       requestRunning = true;
 
-      const [indexResult, systemResult] = await Promise.allSettled([
+      const indexResult = await Promise.allSettled([
         getReindexStatus({
-          signal: controller.signal,
-        }),
-        getSystemStatus({
           signal: controller.signal,
         }),
       ]);
@@ -383,8 +378,8 @@ export default function LibraryPage() {
 
       if (controller.signal.aborted) return;
 
-      if (indexResult.status === "fulfilled") {
-        const state = indexResult.value;
+      if (indexResult[0]?.status === "fulfilled") {
+        const state = indexResult[0].value;
         setIndexing(Boolean(state.running));
 
         if (state.running) {
@@ -407,10 +402,6 @@ export default function LibraryPage() {
               : state.lastResult.errors?.[0]?.error,
           });
         }
-      }
-
-      if (systemResult.status === "fulfilled") {
-        setSystemStatus(systemResult.value);
       }
     }
 
@@ -625,9 +616,9 @@ export default function LibraryPage() {
           <div className="flex flex-col gap-4 xl:flex-row xl:items-end">
             <form
               onSubmit={handleUpload}
-              className="grid min-w-0 flex-1 gap-3 md:grid-cols-[minmax(0,1fr)_220px_170px]"
+              className="grid min-w-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_170px]"
             >
-              <label className="block min-w-0">
+              <label className="block min-w-0 lg:col-span-2">
                 <span className="text-xs font-bold text-slate-700">Choose File</span>
                 <input
                   key={fileInputKey}
@@ -661,7 +652,7 @@ export default function LibraryPage() {
               <button
                 type="submit"
                 disabled={uploading || indexing}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-bold text-white shadow-sm shadow-blue-600/20 transition hover:bg-blue-700 hover:shadow-md hover:shadow-blue-600/20 disabled:cursor-not-allowed disabled:opacity-60 md:mt-6"
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-bold text-white shadow-sm shadow-blue-600/20 transition hover:bg-blue-700 hover:shadow-md hover:shadow-blue-600/20 disabled:cursor-not-allowed disabled:opacity-60 lg:self-end"
               >
                 {uploading ? (
                   <RefreshCw size={16} className="animate-spin" />
@@ -674,12 +665,12 @@ export default function LibraryPage() {
 
             <div className="min-w-0 xl:w-[420px]">
               <p className="text-xs font-bold text-slate-700">Knowledge Actions</p>
-              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-2">
+              <div className="mt-2 grid grid-cols-2 gap-2 xl:grid-cols-[minmax(0,1fr)_170px]">
                 <button
                   type="button"
                   onClick={() => handleReindex({ force: false })}
                   disabled={indexing || uploading}
-                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-bold text-white shadow-sm shadow-violet-600/15 transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-bold text-white shadow-sm shadow-violet-600/15 transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60 xl:col-span-2"
                 >
                   {indexing ? (
                     <RefreshCw size={15} className="animate-spin" />
@@ -706,9 +697,6 @@ export default function LibraryPage() {
                   <BarChart3 size={15} />
                   Coming Soon
                 </button>
-                <span className="flex h-12 items-center justify-center rounded-xl bg-slate-50 px-4 text-xs font-semibold text-slate-500">
-                  {systemStatus?.rag || "status unknown"}
-                </span>
               </div>
             </div>
           </div>
