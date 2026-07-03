@@ -66,7 +66,6 @@ export default function ChatPage() {
 
   const bottomRef = useRef(null);
   const [prompt, setPrompt] = useState("");
-  const [viewportHeight, setViewportHeight] = useState("100dvh");
   const [showStoreRecommendation, setShowStoreRecommendation] =
     useState(true);
   const messagesLoading = Boolean(
@@ -76,56 +75,6 @@ export default function ChatPage() {
   const firstAssistantIndex = activeChat?.messages?.findIndex(
     (item) => item.role === "assistant"
   );
-
-  useEffect(() => {
-    function updateViewportHeight() {
-      const height =
-        window.visualViewport?.height ||
-        window.innerHeight;
-
-      setViewportHeight(`${Math.round(height)}px`);
-    }
-
-    updateViewportHeight();
-
-    window.visualViewport?.addEventListener(
-      "resize",
-      updateViewportHeight
-    );
-    window.visualViewport?.addEventListener(
-      "scroll",
-      updateViewportHeight
-    );
-    window.addEventListener("resize", updateViewportHeight);
-
-    const originalBodyOverflow = document.body.style.overflow;
-    const originalHtmlOverflow = document.documentElement.style.overflow;
-    const originalBodyOverscroll = document.body.style.overscrollBehavior;
-    const originalHtmlOverscroll =
-      document.documentElement.style.overscrollBehavior;
-
-    document.body.style.overflow = "hidden";
-    document.documentElement.style.overflow = "hidden";
-    document.body.style.overscrollBehavior = "none";
-    document.documentElement.style.overscrollBehavior = "none";
-
-    return () => {
-      window.visualViewport?.removeEventListener(
-        "resize",
-        updateViewportHeight
-      );
-      window.visualViewport?.removeEventListener(
-        "scroll",
-        updateViewportHeight
-      );
-      window.removeEventListener("resize", updateViewportHeight);
-      document.body.style.overflow = originalBodyOverflow;
-      document.documentElement.style.overflow = originalHtmlOverflow;
-      document.body.style.overscrollBehavior = originalBodyOverscroll;
-      document.documentElement.style.overscrollBehavior =
-        originalHtmlOverscroll;
-    };
-  }, []);
 
   useEffect(() => {
     window.requestAnimationFrame(() => {
@@ -141,13 +90,7 @@ export default function ChatPage() {
   }, [activeChatId]);
 
   return (
-    <div
-      className="chat-page-shell flex min-h-0 w-full min-w-0 flex-col overflow-hidden"
-      style={{
-        height: viewportHeight,
-        maxHeight: viewportHeight,
-      }}
-    >
+    <div className="chat-page-shell flex h-dvh max-h-dvh min-h-0 w-full min-w-0 flex-col overflow-hidden">
 
       <ChatHeader
         title={activeChat?.title ?? "Ebook-grounded AI tutor"}

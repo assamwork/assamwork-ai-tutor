@@ -26,6 +26,26 @@ body,
   overflow-x: hidden;
 }
 
+html.chat-route-lock,
+html.chat-route-lock body,
+html.chat-route-lock #root {
+  height: 100%;
+  min-height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+html.chat-route-lock body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+}
+
+html.chat-route-lock #root {
+  position: relative;
+}
+
 body {
   margin: 0;
   min-width: 320px;
@@ -142,6 +162,20 @@ html[data-theme="dark"] body {
   background:
     linear-gradient(180deg, rgb(248 250 252 / 0.96), rgb(241 245 249 / 0.92));
   overscroll-behavior: none;
+}
+
+.chat-layout-shell,
+.chat-layout-main {
+  width: 100%;
+  height: 100dvh;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.chat-message-scroll {
+  scrollbar-gutter: stable;
 }
 
 .chat-header,

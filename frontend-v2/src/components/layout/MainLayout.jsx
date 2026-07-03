@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { Menu } from "lucide-react";
 import Sidebar from "./Sidebar";
@@ -8,19 +8,38 @@ export default function MainLayout() {
   const location = useLocation();
   const isChatRoute = location.pathname === "/chat";
 
+  useEffect(() => {
+    document.documentElement.classList.toggle(
+      "chat-route-lock",
+      isChatRoute
+    );
+
+    return () => {
+      document.documentElement.classList.remove("chat-route-lock");
+    };
+  }, [isChatRoute]);
+
   function openSidebar() {
     setSidebarOpen(true);
   }
 
   return (
-    <div className="app-shell flex h-screen h-dvh overflow-hidden bg-slate-50">
+    <div
+      className={`app-shell flex overflow-hidden bg-slate-50 ${
+        isChatRoute ? "chat-layout-shell" : "h-screen h-dvh"
+      }`}
+    >
 
       <Sidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />
 
-      <main className="relative min-w-0 flex-1 overflow-hidden">
+      <main
+        className={`relative min-w-0 flex-1 overflow-hidden ${
+          isChatRoute ? "chat-layout-main" : ""
+        }`}
+      >
         {!isChatRoute && (
           <button
             type="button"

@@ -20,6 +20,12 @@ function getSourcePage(source) {
   return `Page ${page}`;
 }
 
+function getCollapsedSourceLabel(source, remainingCount) {
+  const countLabel = remainingCount > 0 ? ` +${remainingCount}` : "";
+
+  return `${getSourceBook(source)} · ${getSourcePage(source)}${countLabel}`;
+}
+
 export default function SourceCard({ sources = [] }) {
   const [isOpen, setIsOpen] = useState(false);
   const sourceList = Array.isArray(sources) ? sources : [];
@@ -45,8 +51,7 @@ export default function SourceCard({ sources = [] }) {
           </span>
           <span className="min-w-0">
             <span className="source-card-title block truncate text-sm font-semibold leading-5 sm:text-[15px]">
-              {getSourceBook(mainSource)}
-              {remainingCount > 0 ? ` +${remainingCount}` : ""}
+              {getCollapsedSourceLabel(mainSource, remainingCount)}
             </span>
           </span>
         </span>

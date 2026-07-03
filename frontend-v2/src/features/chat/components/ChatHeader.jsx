@@ -5,7 +5,7 @@ export default function ChatHeader({ title, onOpenSidebar }) {
   const navigate = useNavigate();
 
   return (
-    <header className="chat-header z-30 shrink-0 border-b pt-[env(safe-area-inset-top)] shadow-sm backdrop-blur-xl">
+    <header className="chat-header z-30 flex-none shrink-0 border-b pt-[env(safe-area-inset-top)] shadow-sm backdrop-blur-xl">
       <div className="flex h-14 items-center justify-between gap-2 px-3 sm:h-16 sm:gap-3 sm:px-6 lg:px-8">
 
         <button
