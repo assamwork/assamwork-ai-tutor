@@ -142,9 +142,10 @@ export default function ChatPage() {
 
   return (
     <div
-      className="flex min-h-0 w-full min-w-0 flex-col overflow-hidden bg-slate-50 lg:h-full"
+      className="chat-page-shell flex min-h-0 w-full min-w-0 flex-col overflow-hidden"
       style={{
         height: viewportHeight,
+        maxHeight: viewportHeight,
       }}
     >
 
@@ -154,13 +155,13 @@ export default function ChatPage() {
       />
 
       <main
-        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain scroll-smooth"
+        className="chat-message-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain scroll-smooth"
         style={{
           WebkitOverflowScrolling: "touch",
         }}
       >
 
-        <div className="mx-auto min-h-full w-full max-w-5xl px-3 py-3 sm:px-6 sm:py-8 lg:px-8">
+        <div className="mx-auto min-h-full w-full max-w-5xl px-3 py-3 sm:px-6 sm:py-6 lg:px-8">
 
           {chatsLoading || messagesLoading ? (
             <div className="mx-auto max-w-3xl py-6 sm:py-8" aria-live="polite">
@@ -186,7 +187,7 @@ export default function ChatPage() {
             </div>
           ) : activeChat?.messages.length ? (
 
-            <div className="flex min-w-0 flex-col gap-5 pb-2 sm:gap-9">
+            <div className="flex min-w-0 flex-col gap-4 pb-3 sm:gap-7">
 
               {activeChat.messages.map((message, index) => (
                 <div key={message.id} className="min-w-0">

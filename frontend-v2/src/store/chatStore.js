@@ -442,6 +442,13 @@ const useChatStore = create((set, get) => ({
     const sources = rawSources.map((source) => ({
       subject: source?.subject ?? null,
       book: source?.book ?? null,
+      page:
+        source?.page ??
+        source?.pageNumber ??
+        source?.page_number ??
+        source?.pageNo ??
+        source?.page_no ??
+        null,
     }));
 
     if (!uid || !chat || !content) return null;

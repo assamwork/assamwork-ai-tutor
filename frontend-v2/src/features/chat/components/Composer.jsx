@@ -96,8 +96,8 @@ export default function Composer({
   }
 
   return (
-    <div className="relative z-20 shrink-0 border-t border-slate-200 bg-white/95 px-2.5 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-10px_24px_rgba(15,23,42,0.07)] backdrop-blur sm:px-6 sm:py-4 sm:shadow-none">
-      <div className="mx-auto max-w-5xl">
+    <div className="composer-shell relative z-20 shrink-0 border-t px-2.5 pb-[max(0.45rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-10px_28px_rgba(15,23,42,0.08)] backdrop-blur-xl sm:px-6 sm:py-3">
+      <div className="mx-auto max-w-3xl">
         <ChatInputBar
           value={prompt}
           setValue={setPrompt}

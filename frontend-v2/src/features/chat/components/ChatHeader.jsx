@@ -5,7 +5,7 @@ export default function ChatHeader({ title, onOpenSidebar }) {
   const navigate = useNavigate();
 
   return (
-    <header className="sticky top-0 z-30 shrink-0 border-b border-slate-200 bg-white/90 pt-[env(safe-area-inset-top)] shadow-sm shadow-slate-200/60 backdrop-blur-xl lg:shadow-none">
+    <header className="chat-header z-30 shrink-0 border-b pt-[env(safe-area-inset-top)] shadow-sm backdrop-blur-xl">
       <div className="flex h-14 items-center justify-between gap-2 px-3 sm:h-16 sm:gap-3 sm:px-6 lg:px-8">
 
         <button
@@ -41,7 +41,7 @@ export default function ChatHeader({ title, onOpenSidebar }) {
           <Home size={17} />
         </button>
 
-        <div className="hidden max-w-sm items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800 md:flex">
+        <div className="hidden max-w-sm items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50/80 px-3 py-2 text-xs font-medium text-emerald-800 md:flex">
           <ShieldCheck size={16} className="shrink-0" />
           Answers are generated from AssamWork study materials only.
         </div>
