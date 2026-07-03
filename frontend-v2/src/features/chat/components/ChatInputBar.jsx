@@ -55,18 +55,18 @@ export default function ChatInputBar({
   const SendIcon = sendIcon === "arrow" ? ArrowUp : SendHorizontal;
   const isCompact = size === "compact";
   const frameClassName =
-    "chat-input-bar grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,3fr)_minmax(0,1fr)] items-center gap-1.5 sm:gap-2";
+    "chat-input-bar grid min-w-0 grid-cols-[minmax(2.75rem,1fr)_minmax(0,3.4fr)_minmax(2.75rem,1fr)] items-center gap-1.5 sm:grid-cols-[minmax(0,1fr)_minmax(0,3fr)_minmax(0,1fr)] sm:gap-2";
   const controlClassName = isCompact
     ? "chat-input-button mx-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-slate-500 transition hover:text-slate-700"
-    : "chat-input-button mx-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full border text-slate-500 transition hover:text-slate-700";
+    : "chat-input-button mx-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-slate-500 transition hover:text-slate-700 sm:h-11 sm:w-11";
   const sendClassName = isCompact
-    ? "flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none"
-    : "flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none";
+    ? "chat-send-button flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none"
+    : "chat-send-button flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none sm:h-[2.125rem] sm:w-[2.125rem]";
   const textareaClassName = isCompact
-    ? "h-10 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-2 text-[15px] leading-6 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed"
-    : "h-10 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-2 text-[15px] leading-6 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed";
+    ? "chat-composer-input h-9 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-0.5 py-1.5 text-[14px] leading-6 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed sm:text-[15px]"
+    : "chat-composer-input h-9 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-0.5 py-1.5 text-[14px] leading-6 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed sm:text-[15px]";
   const iconSize = isCompact ? 15 : 17;
-  const sendIconSize = isCompact ? 16 : 18;
+  const sendIconSize = isCompact ? 16 : 17;
 
   return (
     <div className="relative">
@@ -93,7 +93,7 @@ export default function ChatInputBar({
           <Paperclip size={iconSize} />
         </button>
 
-        <div className="chat-composer-pill flex h-12 min-w-0 items-center gap-1.5 rounded-full border px-3 shadow-lg transition focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100 sm:h-[3.25rem] sm:px-3.5">
+        <div className="chat-composer-pill flex h-11 min-w-0 items-center gap-1.5 rounded-full border px-2.5 shadow-lg transition sm:h-12 sm:px-3">
           <textarea
             rows={1}
             value={value}

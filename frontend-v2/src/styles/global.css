@@ -204,6 +204,27 @@ html[data-theme="dark"] body {
   -webkit-backdrop-filter: blur(18px) saturate(140%);
 }
 
+.chat-composer-pill:focus-within {
+  border-color: rgb(148 163 184 / 0.92);
+  box-shadow:
+    0 16px 34px rgb(15 23 42 / 0.13),
+    0 0 0 1px rgb(148 163 184 / 0.14),
+    inset 0 1px 0 rgb(255 255 255 / 0.84);
+}
+
+.chat-input-bar :focus,
+.chat-input-bar :focus-visible {
+  outline: none !important;
+}
+
+.chat-composer-input {
+  box-shadow: none !important;
+}
+
+.chat-composer-input::placeholder {
+  opacity: 1;
+}
+
 .chat-input-button {
   background: rgb(248 250 252 / 0.72);
   border-color: rgb(226 232 240 / 0.86);
@@ -314,6 +335,14 @@ html[data-theme="dark"] .chat-composer-pill {
   box-shadow:
     0 18px 44px rgb(0 0 0 / 0.35),
     inset 0 1px 0 rgb(148 163 184 / 0.12);
+}
+
+html[data-theme="dark"] .chat-composer-pill:focus-within {
+  border-color: rgb(100 116 139 / 0.95) !important;
+  box-shadow:
+    0 18px 42px rgb(0 0 0 / 0.38),
+    0 0 0 1px rgb(148 163 184 / 0.14),
+    inset 0 1px 0 rgb(148 163 184 / 0.14);
 }
 
 html[data-theme="dark"] .chat-input-button {
