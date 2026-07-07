@@ -99,9 +99,61 @@ RETRIEVAL_QUERY_ALIASES = (
 RETRIEVAL_CANDIDATE_LIMIT = 30
 ANSWER_CONTEXT_CHUNK_LIMIT = 6
 DISPLAY_PRIMARY_SOURCE_LIMIT = 3
-DISPLAY_OPTIONAL_SOURCE_LIMIT = 2
+DISPLAY_OPTIONAL_SOURCE_LIMIT = 0
 CONTEXT_SUPPORT_MIN_SCORE = 0.42
 OPTIONAL_SOURCE_MIN_SCORE = 0.72
+DOCUMENT_TYPE_PRIMARY_EXPLANATORY = "primary_explanatory"
+DOCUMENT_TYPE_REVISION_HIGH_YIELD = "revision_high_yield"
+DOCUMENT_TYPE_SECONDARY_PRACTICE = "secondary_practice"
+DOCUMENT_TYPE_UNKNOWN = "unknown"
+PRACTICE_SOURCE_PATTERNS = (
+    r"\bmcq(?:s)?\b",
+    r"\bmultiple\s+choice\b",
+    r"\bpyq(?:s)?\b",
+    r"\bprevious\s+year(?:s)?\b",
+    r"\bmock(?:\s+test)?(?:s)?\b",
+    r"\bpractice(?:\s+set)?(?:s)?\b",
+    r"\bquestion\s+bank(?:s)?\b",
+    r"\bmodel\s+paper(?:s)?\b",
+    r"\bsample\s+paper(?:s)?\b",
+    r"\bquestion\s+paper(?:s)?\b",
+    r"\btest\s+series\b",
+    r"\bobjective\s+question(?:s)?\b",
+)
+REVISION_HIGH_YIELD_SOURCE_PATTERNS = (
+    r"\bhigh\s*yield\b",
+    r"\brevision(?:\s+notes?)?\b",
+    r"\bquick\s+revision\b",
+    r"\bshort\s+notes?\b",
+    r"\bimportant\s+topics?\b",
+    r"\bcapsule\b",
+    r"\bcheat\s*sheet\b",
+)
+PRIMARY_EXPLANATORY_SOURCE_PATTERNS = (
+    r"\bmain\s+book\b",
+    r"\bassam\s+(?:book|gk|general\s+knowledge)\b",
+    r"\bsubject\s+book\b",
+    r"\btext\s*book\b",
+    r"\bbook\b",
+    r"\bnotes?\b",
+    r"\bstudy\s+material(?:s)?\b",
+    r"\bguide\b",
+    r"\bhandbook\b",
+    r"\bmanual\b",
+    r"\bchapter\b",
+    r"\benvironment\b",
+    r"\bhistory\b",
+    r"\bgeography\b",
+)
+PRACTICE_QUERY_PATTERN = re.compile(
+    (
+        r"\b(mcq(?:s)?|multiple\s+choice|pyq(?:s)?|previous\s+year(?:s)?|"
+        r"mock(?:\s+test)?(?:s)?|practice(?:\s+set)?(?:s)?|question\s+bank|"
+        r"model\s+paper(?:s)?|sample\s+paper(?:s)?|question\s+paper(?:s)?|"
+        r"quiz(?:zes)?)\b"
+    ),
+    re.IGNORECASE,
+)
 EXPLANATION_SIGNAL_WORDS = {
     "are",
     "battle",
@@ -736,6 +788,73 @@ def _term_occurrences(document: str, terms):
     }
 
 
+def _source_title_text(metadata: dict):
+    metadata = metadata or {}
+
+    return " ".join(
+        str(value or "")
+        for value in (
+            metadata.get("filename"),
+            metadata.get("book"),
+            metadata.get("subject"),
+        )
+    )
+
+
+def _normalize_source_title(value: str):
+    normalized = re.sub(r"\.[a-z0-9]{1,8}\b", " ", (value or "").lower())
+    normalized = re.sub(r"[_\-/]+", " ", normalized)
+    normalized = re.sub(r"[^a-z0-9\s]", " ", normalized)
+
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def _matches_any_pattern(value: str, patterns):
+    return any(re.search(pattern, value, re.IGNORECASE) for pattern in patterns)
+
+
+def _classify_source_document_type(metadata: dict):
+    title = _normalize_source_title(_source_title_text(metadata))
+
+    if _matches_any_pattern(title, PRACTICE_SOURCE_PATTERNS):
+        return DOCUMENT_TYPE_SECONDARY_PRACTICE
+
+    if _matches_any_pattern(title, REVISION_HIGH_YIELD_SOURCE_PATTERNS):
+        return DOCUMENT_TYPE_REVISION_HIGH_YIELD
+
+    if _matches_any_pattern(title, PRIMARY_EXPLANATORY_SOURCE_PATTERNS):
+        return DOCUMENT_TYPE_PRIMARY_EXPLANATORY
+
+    return DOCUMENT_TYPE_UNKNOWN
+
+
+def _is_practice_query(question: str):
+    return bool(PRACTICE_QUERY_PATTERN.search(question or ""))
+
+
+def _document_type_priority(document_type: str, practice_intent: bool):
+    if practice_intent:
+        priorities = {
+            DOCUMENT_TYPE_SECONDARY_PRACTICE: 4,
+            DOCUMENT_TYPE_REVISION_HIGH_YIELD: 3,
+            DOCUMENT_TYPE_PRIMARY_EXPLANATORY: 2,
+            DOCUMENT_TYPE_UNKNOWN: 1,
+        }
+    else:
+        priorities = {
+            DOCUMENT_TYPE_PRIMARY_EXPLANATORY: 4,
+            DOCUMENT_TYPE_REVISION_HIGH_YIELD: 3,
+            DOCUMENT_TYPE_UNKNOWN: 2,
+            DOCUMENT_TYPE_SECONDARY_PRACTICE: 0,
+        }
+
+    return priorities.get(document_type, 1)
+
+
+def _is_secondary_practice_record(record: dict):
+    return record.get("document_type") == DOCUMENT_TYPE_SECONDARY_PRACTICE
+
+
 def _has_explanation_signal(question: str, document: str, query_terms):
     if _has_definition_signal(question, document, query_terms):
         return True
@@ -773,6 +892,7 @@ def _metadata_is_complete(metadata: dict):
 def _source_from_metadata(metadata: dict):
     metadata = metadata or {}
     display_page = _metadata_display_page(metadata)
+    document_type = _classify_source_document_type(metadata)
 
     return {
         "subject": metadata.get("subject"),
@@ -782,6 +902,7 @@ def _source_from_metadata(metadata: dict):
         "pdf_page_index": _metadata_pdf_page_index(metadata),
         "display_page": display_page,
         "source_page_label": metadata.get("source_page_label") or "",
+        "_document_type": document_type,
     }
 
 
@@ -881,6 +1002,7 @@ def _score_retrieved_chunk(
         "metadata": metadata or {},
         "distance": distance,
         "source": _source_from_metadata(metadata or {}),
+        "document_type": _classify_source_document_type(metadata or {}),
         "score": score,
         "semantic_score": round(semantic_score, 4),
         "overlap_terms": overlap,
@@ -892,6 +1014,9 @@ def _score_retrieved_chunk(
         "rejected": rejected,
         "rejection_reasons": reasons,
         "selected_for_context": False,
+        "selection_reason": "",
+        "context_rank": None,
+        "ranking_priority": None,
     }
 
 
@@ -1139,20 +1264,65 @@ def _chunk_dedupe_key(record: dict):
     )
 
 
-def _select_supporting_chunks(records):
+def _record_rank_key(record: dict, practice_intent: bool):
+    priority = _document_type_priority(
+        record.get("document_type") or DOCUMENT_TYPE_UNKNOWN,
+        practice_intent,
+    )
+    record["ranking_priority"] = priority
+
+    return (
+        priority,
+        record.get("score", 0),
+        int(bool(record.get("definition_or_explanation"))),
+        record.get("semantic_score", 0),
+        -record.get("index", 0),
+    )
+
+
+def _select_supporting_chunks(records, question: str):
+    practice_intent = _is_practice_query(question)
     selected = []
     seen = set()
+
+    for record in records:
+        record["selected_for_context"] = False
+        record["context_rank"] = None
+        record["ranking_priority"] = _document_type_priority(
+            record.get("document_type") or DOCUMENT_TYPE_UNKNOWN,
+            practice_intent,
+        )
+
+        if record.get("rejected"):
+            record["selection_reason"] = (
+                "rejected_weak_support:"
+                + ",".join(record.get("rejection_reasons") or ["unknown"])
+            )
+        else:
+            record["selection_reason"] = "eligible"
+
     eligible = [
         record
         for record in records
         if not record.get("rejected")
     ]
+    explanatory_eligible = [
+        record
+        for record in eligible
+        if not _is_secondary_practice_record(record)
+    ]
+
+    if not practice_intent and explanatory_eligible:
+        for record in eligible:
+            if _is_secondary_practice_record(record):
+                record["selection_reason"] = (
+                    "practice_source_deprioritized_explanatory_available"
+                )
+
+        eligible = explanatory_eligible
+
     eligible.sort(
-        key=lambda record: (
-            record.get("score", 0),
-            record.get("semantic_score", 0),
-            -record.get("index", 0),
-        ),
+        key=lambda record: _record_rank_key(record, practice_intent),
         reverse=True,
     )
 
@@ -1160,14 +1330,21 @@ def _select_supporting_chunks(records):
         dedupe_key = _chunk_dedupe_key(record)
 
         if dedupe_key in seen:
+            record["selection_reason"] = "duplicate_chunk"
             continue
 
         seen.add(dedupe_key)
         record["selected_for_context"] = True
+        record["selection_reason"] = "selected_for_context"
+        record["context_rank"] = len(selected) + 1
         selected.append(record)
 
         if len(selected) >= ANSWER_CONTEXT_CHUNK_LIMIT:
             break
+
+    for record in eligible:
+        if record.get("selection_reason") == "eligible":
+            record["selection_reason"] = "not_selected_below_context_limit"
 
     return selected
 
@@ -1224,6 +1401,9 @@ def _strip_internal_source_fields(source: dict):
     for key in (
         "_support_score",
         "_range_sort",
+        "_document_type",
+        "_ranking_priority",
+        "_context_rank",
         "page_start",
         "page_end",
     ):
@@ -1234,12 +1414,14 @@ def _strip_internal_source_fields(source: dict):
 
 def _source_sort_key(source: dict):
     return (
+        source.get("_ranking_priority", 0),
         source.get("_support_score", 0),
+        -source.get("_context_rank", 999),
         -source.get("_range_sort", 0),
     )
 
 
-def _merge_selected_sources(selected_records):
+def _merge_selected_sources(selected_records, strip_internal=True):
     grouped = {}
 
     for record in selected_records:
@@ -1307,6 +1489,9 @@ def _merge_selected_sources(selected_records):
                     "source_page_label": str(page_label or ""),
                     "page_start": range_start,
                     "page_end": range_end,
+                    "_document_type": best_record.get("document_type"),
+                    "_ranking_priority": best_record.get("ranking_priority", 0),
+                    "_context_rank": best_record.get("context_rank") or 999,
                     "_support_score": best_record.get("score", 0),
                     "_range_sort": range_start or 0,
                 }
@@ -1344,6 +1529,9 @@ def _merge_selected_sources(selected_records):
                     "pdf_page_index": best_source.get("pdf_page_index"),
                     "display_page": label,
                     "source_page_label": label,
+                    "_document_type": record.get("document_type"),
+                    "_ranking_priority": record.get("ranking_priority", 0),
+                    "_context_rank": record.get("context_rank") or 999,
                     "_support_score": record.get("score", 0),
                     "_range_sort": 0,
                 }
@@ -1357,9 +1545,14 @@ def _merge_selected_sources(selected_records):
         if source.get("_support_score", 0) >= OPTIONAL_SOURCE_MIN_SCORE
     ][:DISPLAY_OPTIONAL_SOURCE_LIMIT]
 
+    selected_sources = primary_sources + optional_sources
+
+    if not strip_internal:
+        return selected_sources
+
     return [
         _strip_internal_source_fields(source)
-        for source in (primary_sources + optional_sources)
+        for source in selected_sources
     ]
 
 
@@ -1372,6 +1565,9 @@ def _source_log_summary(sources):
                 "book": source.get("book") or source.get("filename"),
                 "page": source.get("display_page"),
                 "chunk_id": source.get("chunk_id"),
+                "document_type": source.get("_document_type"),
+                "support_score": source.get("_support_score"),
+                "rank_priority": source.get("_ranking_priority"),
             }
         )
 
@@ -1386,6 +1582,7 @@ def _log_source_filtering(
     displayed_sources,
     trace_id: str | None = None,
 ):
+    practice_intent = _is_practice_query(question)
     rejected_records = [
         record
         for record in records
@@ -1402,13 +1599,15 @@ def _log_source_filtering(
         (
             "source filtering summary total_retrieved_chunks=%s "
             "chunks_selected_for_context=%s candidate_sources=%s "
-            "displayed_sources=%s rejected_weak_sources=%s reasons=%s query=%r"
+            "displayed_sources=%s rejected_weak_sources=%s "
+            "practice_intent=%s reasons=%s query=%r"
         ),
         len(records or []),
         len(selected_records or []),
         len(candidate_sources or []),
         len(displayed_sources or []),
         len(rejected_records),
+        practice_intent,
         reason_counts,
         question,
     )
@@ -1428,18 +1627,56 @@ def _log_source_filtering(
         _trace(
             trace_id,
             (
-                "selected context chunk index=%s score=%s semantic=%s "
-                "book=%r page=%r overlap=%s phrase_occurrences=%s "
-                "definition_or_explanation=%s"
+                "selected context chunk rank=%s index=%s filename=%r "
+                "document_type=%s rank_priority=%s support_score=%s "
+                "semantic=%s page=%r overlap=%s phrase_occurrences=%s "
+                "definition_or_explanation=%s reason=%s"
             ),
+            record.get("context_rank"),
             record.get("index"),
+            source.get("book") or source.get("filename"),
+            record.get("document_type"),
+            record.get("ranking_priority"),
             record.get("score"),
             record.get("semantic_score"),
-            source.get("book") or source.get("filename"),
             source.get("display_page"),
             record.get("overlap_terms"),
             record.get("phrase_occurrences"),
             record.get("definition_or_explanation"),
+            record.get("selection_reason"),
+        )
+
+    ranked_records = sorted(
+        records or [],
+        key=lambda record: _record_rank_key(record, practice_intent),
+        reverse=True,
+    )
+
+    for final_rank, record in enumerate(ranked_records, start=1):
+        source = record.get("source") or {}
+        rejected_reason = (
+            ",".join(record.get("rejection_reasons") or [])
+            if record.get("rejected")
+            else ""
+        )
+        _trace(
+            trace_id,
+            (
+                "source ranking detail final_rank=%s context_rank=%s "
+                "selected=%s filename=%r document_type=%s rank_priority=%s "
+                "support_score=%s page=%r rejected_reason=%r "
+                "selection_reason=%r"
+            ),
+            final_rank,
+            record.get("context_rank"),
+            record.get("selected_for_context"),
+            source.get("book") or source.get("filename"),
+            record.get("document_type"),
+            record.get("ranking_priority"),
+            record.get("score"),
+            source.get("display_page"),
+            rejected_reason,
+            record.get("selection_reason"),
         )
 
     for record in rejected_records:
@@ -1448,13 +1685,14 @@ def _log_source_filtering(
             trace_id,
             (
                 "rejected weak chunk index=%s score=%s reasons=%s "
-                "book=%r page=%r overlap=%s phrase_occurrences=%s "
-                "selected_for_context=%s"
+                "filename=%r document_type=%s page=%r overlap=%s "
+                "phrase_occurrences=%s selected_for_context=%s"
             ),
             record.get("index"),
             record.get("score"),
             record.get("rejection_reasons"),
             source.get("book") or source.get("filename"),
+            record.get("document_type"),
             source.get("display_page"),
             record.get("overlap_terms"),
             record.get("phrase_occurrences"),
@@ -1770,7 +2008,7 @@ def _retrieve_context(question: str, trace_id: str | None = None):
         metadatas,
         distances,
     )
-    selected_records = _select_supporting_chunks(scored_records)
+    selected_records = _select_supporting_chunks(scored_records, question)
     selected_documents = [
         record.get("document") or ""
         for record in selected_records
@@ -1779,7 +2017,14 @@ def _retrieve_context(question: str, trace_id: str | None = None):
         record.get("distance")
         for record in selected_records
     ]
-    displayed_sources = _merge_selected_sources(selected_records)
+    ranked_displayed_sources = _merge_selected_sources(
+        selected_records,
+        strip_internal=False,
+    )
+    displayed_sources = [
+        _strip_internal_source_fields(source)
+        for source in ranked_displayed_sources
+    ]
     selected_context = _context_from_selected_chunks(selected_records)
     confidence = _evaluate_retrieval_confidence(
         question,
@@ -1797,7 +2042,7 @@ def _retrieve_context(question: str, trace_id: str | None = None):
         scored_records,
         selected_records,
         candidate_sources,
-        displayed_sources,
+        ranked_displayed_sources,
         trace_id,
     )
 
@@ -1871,7 +2116,19 @@ def _answer_length_instruction(question: str, question_type: str):
 
     if any(
         keyword in normalized
-        for keyword in ("mcq", "mcqs", "quiz", "question paper")
+        for keyword in (
+            "mcq",
+            "mcqs",
+            "quiz",
+            "pyq",
+            "pyqs",
+            "previous year",
+            "mock",
+            "practice",
+            "question bank",
+            "model paper",
+            "question paper",
+        )
     ):
         return (
             "The user wants exam practice. If the retrieved material supports "
