@@ -96,6 +96,55 @@ INTENT_WORDS = {
 RETRIEVAL_QUERY_ALIASES = (
     (re.compile(r"\bdipor\s+beel\b", re.IGNORECASE), "Deepor Beel"),
 )
+RETRIEVAL_CANDIDATE_LIMIT = 30
+ANSWER_CONTEXT_CHUNK_LIMIT = 6
+DISPLAY_PRIMARY_SOURCE_LIMIT = 3
+DISPLAY_OPTIONAL_SOURCE_LIMIT = 2
+CONTEXT_SUPPORT_MIN_SCORE = 0.42
+OPTIONAL_SOURCE_MIN_SCORE = 0.72
+EXPLANATION_SIGNAL_WORDS = {
+    "are",
+    "battle",
+    "became",
+    "born",
+    "called",
+    "commander",
+    "comprises",
+    "consists",
+    "covers",
+    "defined",
+    "died",
+    "established",
+    "famous",
+    "features",
+    "formed",
+    "founded",
+    "freedom",
+    "freshwater",
+    "general",
+    "important",
+    "importance",
+    "include",
+    "includes",
+    "is",
+    "known",
+    "lake",
+    "led",
+    "located",
+    "means",
+    "refers",
+    "ramsar",
+    "river",
+    "ruler",
+    "served",
+    "significance",
+    "situated",
+    "site",
+    "tributary",
+    "was",
+    "were",
+    "wetland",
+}
 QUESTION_TYPE_RULES = (
     ("Constitution Article", (
         r"\barticle\s+\d+[a-z]?\b",
@@ -590,6 +639,14 @@ def _tokenize(value: str):
     ]
 
 
+def _raw_tokens(value: str):
+    return [
+        token
+        for token in re.findall(r"[a-zA-Z0-9]+", value.lower())
+        if token
+    ]
+
+
 def _important_query_terms(question: str):
     return [
         token
@@ -662,6 +719,200 @@ def _has_definition_signal(question: str, document: str, query_terms):
         re.search(rf"\b{term}\b\s+(?:{term_first_pattern})\b", text)
         or re.search(rf"\b(?:{term_second_pattern})\b[^.:\n]*\b{term}\b", text)
     )
+
+
+def _topic_phrase(question: str):
+    phrase = _topic_heading(question)
+    phrase = re.sub(r"[^a-zA-Z0-9\s]", " ", phrase)
+    phrase = re.sub(r"\s+", " ", phrase).strip()
+
+    return phrase
+
+
+def _phrase_pattern(phrase: str):
+    terms = _tokenize(phrase or "")
+
+    if not terms:
+        return None
+
+    return re.compile(r"\b" + r"\s+".join(map(re.escape, terms)) + r"\b")
+
+
+def _phrase_occurrences(document: str, phrase: str):
+    pattern = _phrase_pattern(phrase)
+
+    if not pattern:
+        return 0
+
+    return len(pattern.findall((document or "").lower()))
+
+
+def _term_occurrences(document: str, terms):
+    text = (document or "").lower()
+
+    return {
+        term: len(re.findall(rf"\b{re.escape(term)}\b", text))
+        for term in terms
+    }
+
+
+def _has_explanation_signal(question: str, document: str, query_terms):
+    if _has_definition_signal(question, document, query_terms):
+        return True
+
+    phrase = _topic_phrase(question)
+    pattern = _phrase_pattern(phrase)
+    text = re.sub(r"\s+", " ", (document or "").lower())
+
+    if pattern:
+        for match in pattern.finditer(text):
+            start = max(match.start() - 140, 0)
+            end = min(match.end() + 140, len(text))
+            window_terms = set(_raw_tokens(text[start:end]))
+
+            if window_terms & EXPLANATION_SIGNAL_WORDS:
+                return True
+
+    document_terms = set(_tokenize(document or ""))
+    raw_document_terms = set(_raw_tokens(document or ""))
+    important_terms = set(query_terms or [])
+
+    if important_terms and important_terms <= document_terms:
+        return bool(raw_document_terms & EXPLANATION_SIGNAL_WORDS)
+
+    return False
+
+
+def _metadata_is_complete(metadata: dict):
+    return bool(
+        metadata.get("book")
+        or metadata.get("filename")
+    )
+
+
+def _source_from_metadata(metadata: dict):
+    metadata = metadata or {}
+    display_page = _metadata_display_page(metadata)
+
+    return {
+        "subject": metadata.get("subject"),
+        "book": metadata.get("book"),
+        "filename": metadata.get("filename") or metadata.get("book"),
+        "chunk_id": metadata.get("chunk_id"),
+        "pdf_page_index": _metadata_pdf_page_index(metadata),
+        "display_page": display_page,
+        "source_page_label": metadata.get("source_page_label") or "",
+    }
+
+
+def _score_retrieved_chunk(
+    question: str,
+    document: str,
+    metadata: dict,
+    distance,
+    index: int,
+):
+    important_terms = _unique_terms(_important_query_terms(question))
+    document_terms = set(_tokenize(document or ""))
+    overlap = sorted(set(important_terms) & document_terms)
+    term_counts = _term_occurrences(document or "", important_terms)
+    total_occurrences = sum(term_counts.values())
+    topic_phrase = _topic_phrase(question)
+    phrase_count = _phrase_occurrences(document or "", topic_phrase)
+    explanation_signal = _has_explanation_signal(
+        question,
+        document or "",
+        important_terms,
+    )
+    semantic_score = _distance_score(distance)
+
+    if semantic_score is None:
+        semantic_score = max(0.0, 1 - (index * 0.08))
+
+    semantic_score = max(0.0, min(float(semantic_score), 1.0))
+    term_count = max(len(important_terms), 1)
+    overlap_ratio = len(overlap) / term_count
+    exact_phrase_score = 1.0 if phrase_count else 0.0
+    explanation_score = 1.0 if explanation_signal else 0.0
+    word_count = len(_tokenize(document or ""))
+
+    if word_count < 25:
+        usefulness_score = 0.0
+    else:
+        usefulness_score = min(word_count / 120, 1.0)
+
+    occurrence_score = min(total_occurrences / max(term_count * 2, 1), 1.0)
+    score = round(
+        (semantic_score * 0.28)
+        + (overlap_ratio * 0.26)
+        + (exact_phrase_score * 0.16)
+        + (explanation_score * 0.16)
+        + (usefulness_score * 0.10)
+        + (occurrence_score * 0.04),
+        4,
+    )
+
+    reasons = []
+    numeric_terms = [
+        term
+        for term in important_terms
+        if term.isdigit()
+    ]
+
+    if not (document or "").strip():
+        reasons.append("empty_chunk")
+
+    if not _metadata_is_complete(metadata or {}):
+        reasons.append("missing_source_metadata")
+
+    if important_terms and not overlap:
+        reasons.append("weak_overlap")
+
+    if numeric_terms and not all(term in document_terms for term in numeric_terms):
+        reasons.append("numeric_terms_not_supported")
+
+    if (
+        important_terms
+        and len(overlap) <= 1
+        and total_occurrences <= 1
+        and not phrase_count
+        and not explanation_signal
+    ):
+        reasons.append("mention_only")
+
+    if (
+        phrase_count <= 1
+        and total_occurrences <= term_count
+        and not explanation_signal
+    ):
+        reasons.append("mentions_without_explanation")
+
+    if score < CONTEXT_SUPPORT_MIN_SCORE:
+        reasons.append("low_support_score")
+
+    if semantic_score < 0.2 and not explanation_signal:
+        reasons.append("low_semantic_similarity")
+
+    rejected = bool(reasons)
+
+    return {
+        "index": index,
+        "document": document or "",
+        "metadata": metadata or {},
+        "distance": distance,
+        "source": _source_from_metadata(metadata or {}),
+        "score": score,
+        "semantic_score": round(semantic_score, 4),
+        "overlap_terms": overlap,
+        "overlap_ratio": round(overlap_ratio, 4),
+        "phrase_occurrences": phrase_count,
+        "term_occurrences": term_counts,
+        "word_count": word_count,
+        "definition_or_explanation": explanation_signal,
+        "rejected": rejected,
+        "rejection_reasons": reasons,
+        "selected_for_context": False,
+    }
 
 
 def _is_greeting(question: str):
@@ -816,6 +1067,7 @@ def _sources_from_metadatas(metadatas):
 
     for item in metadatas:
         item = item or {}
+        source = _source_from_metadata(item)
         display_page = _metadata_display_page(item)
         source_key = (
             item.get("subject"),
@@ -827,16 +1079,6 @@ def _sources_from_metadatas(metadatas):
             continue
 
         seen.add(source_key)
-        source = {
-            "subject": item.get("subject"),
-            "book": item.get("book"),
-            "filename": item.get("filename") or item.get("book"),
-            "chunk_id": item.get("chunk_id"),
-            "pdf_page_index": _metadata_pdf_page_index(item),
-            "display_page": display_page,
-            "source_page_label": item.get("source_page_label") or "",
-        }
-
         sources.append(source)
 
     return sources
@@ -854,6 +1096,390 @@ def _flatten_query_result(results, key):
         return first
 
     return values
+
+
+def _collection_query_limit(collection):
+    try:
+        total_chunks = int(collection.count())
+    except Exception:
+        return RETRIEVAL_CANDIDATE_LIMIT
+
+    if total_chunks <= 0:
+        return 0
+
+    return min(RETRIEVAL_CANDIDATE_LIMIT, total_chunks)
+
+
+def _score_retrieved_chunks(question: str, ids, documents, metadatas, distances):
+    records = []
+
+    for index, document in enumerate(documents or []):
+        metadata = (
+            dict((metadatas or [{}])[index] or {})
+            if index < len(metadatas or [])
+            else {}
+        )
+
+        if not metadata.get("chunk_id") and index < len(ids or []):
+            metadata["chunk_id"] = ids[index]
+
+        distance = (
+            (distances or [None])[index]
+            if index < len(distances or [])
+            else None
+        )
+        records.append(
+            _score_retrieved_chunk(
+                question,
+                document,
+                metadata,
+                distance,
+                index,
+            )
+        )
+
+    return records
+
+
+def _chunk_dedupe_key(record: dict):
+    metadata = record.get("metadata") or {}
+    chunk_id = metadata.get("chunk_id")
+
+    if chunk_id:
+        return ("chunk", chunk_id)
+
+    source = record.get("source") or {}
+
+    return (
+        "source_text",
+        source.get("subject"),
+        source.get("book") or source.get("filename"),
+        source.get("pdf_page_index"),
+        re.sub(r"\s+", " ", record.get("document") or "").strip()[:180],
+    )
+
+
+def _select_supporting_chunks(records):
+    selected = []
+    seen = set()
+    eligible = [
+        record
+        for record in records
+        if not record.get("rejected")
+    ]
+    eligible.sort(
+        key=lambda record: (
+            record.get("score", 0),
+            record.get("semantic_score", 0),
+            -record.get("index", 0),
+        ),
+        reverse=True,
+    )
+
+    for record in eligible:
+        dedupe_key = _chunk_dedupe_key(record)
+
+        if dedupe_key in seen:
+            continue
+
+        seen.add(dedupe_key)
+        record["selected_for_context"] = True
+        selected.append(record)
+
+        if len(selected) >= ANSWER_CONTEXT_CHUNK_LIMIT:
+            break
+
+    return selected
+
+
+def _context_from_selected_chunks(selected_records):
+    context_parts = []
+
+    for record in selected_records:
+        source = record.get("source") or {}
+        book = source.get("book") or source.get("filename") or "Unknown source"
+        page = source.get("display_page")
+        page_label = f", Page {page}" if page not in (None, "") else ""
+        text = (record.get("document") or "").strip()
+
+        if not text:
+            continue
+
+        context_parts.append(f"Source: {book}{page_label}\n{text}")
+
+    return "\n\n".join(context_parts)
+
+
+def _numeric_page(value):
+    if isinstance(value, bool) or value in (None, ""):
+        return None
+
+    if isinstance(value, int):
+        return value
+
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+
+    value_text = str(value).strip()
+
+    if re.fullmatch(r"\d+", value_text):
+        return int(value_text)
+
+    return None
+
+
+def _source_page_label(start_page, end_page):
+    if start_page in (None, ""):
+        return None
+
+    if end_page in (None, "") or end_page == start_page:
+        return start_page
+
+    return f"{start_page}-{end_page}"
+
+
+def _strip_internal_source_fields(source: dict):
+    clean_source = dict(source)
+
+    for key in (
+        "_support_score",
+        "_range_sort",
+        "page_start",
+        "page_end",
+    ):
+        clean_source.pop(key, None)
+
+    return clean_source
+
+
+def _source_sort_key(source: dict):
+    return (
+        source.get("_support_score", 0),
+        -source.get("_range_sort", 0),
+    )
+
+
+def _merge_selected_sources(selected_records):
+    grouped = {}
+
+    for record in selected_records:
+        source = record.get("source") or {}
+        subject = source.get("subject")
+        book = source.get("book") or source.get("filename")
+        filename = source.get("filename") or book
+        group_key = (subject, book, filename)
+        group = grouped.setdefault(
+            group_key,
+            {
+                "subject": subject,
+                "book": book,
+                "filename": filename,
+                "numeric_pages": {},
+                "label_pages": {},
+            },
+        )
+        display_page = source.get("display_page")
+        numeric_page = _numeric_page(display_page)
+
+        if numeric_page is not None:
+            existing = group["numeric_pages"].get(numeric_page)
+
+            if not existing or record.get("score", 0) > existing.get("score", 0):
+                group["numeric_pages"][numeric_page] = record
+
+            continue
+
+        label = (
+            str(display_page or source.get("source_page_label") or "Page not available")
+            .strip()
+        )
+        existing = group["label_pages"].get(label)
+
+        if not existing or record.get("score", 0) > existing.get("score", 0):
+            group["label_pages"][label] = record
+
+    merged_sources = []
+
+    for group in grouped.values():
+        pages = sorted(group["numeric_pages"])
+        range_start = None
+        range_end = None
+        range_records = []
+
+        def flush_range():
+            if range_start is None:
+                return
+
+            best_record = max(
+                range_records,
+                key=lambda item: item.get("score", 0),
+            )
+            best_source = best_record.get("source") or {}
+            page_label = _source_page_label(range_start, range_end)
+            merged_sources.append(
+                {
+                    "subject": group["subject"],
+                    "book": group["book"],
+                    "filename": group["filename"],
+                    "chunk_id": best_source.get("chunk_id"),
+                    "pdf_page_index": best_source.get("pdf_page_index"),
+                    "display_page": page_label,
+                    "source_page_label": str(page_label or ""),
+                    "page_start": range_start,
+                    "page_end": range_end,
+                    "_support_score": best_record.get("score", 0),
+                    "_range_sort": range_start or 0,
+                }
+            )
+
+        for page in pages:
+            record = group["numeric_pages"][page]
+
+            if range_start is None:
+                range_start = page
+                range_end = page
+                range_records = [record]
+                continue
+
+            if page == range_end + 1:
+                range_end = page
+                range_records.append(record)
+                continue
+
+            flush_range()
+            range_start = page
+            range_end = page
+            range_records = [record]
+
+        flush_range()
+
+        for label, record in group["label_pages"].items():
+            best_source = record.get("source") or {}
+            merged_sources.append(
+                {
+                    "subject": group["subject"],
+                    "book": group["book"],
+                    "filename": group["filename"],
+                    "chunk_id": best_source.get("chunk_id"),
+                    "pdf_page_index": best_source.get("pdf_page_index"),
+                    "display_page": label,
+                    "source_page_label": label,
+                    "_support_score": record.get("score", 0),
+                    "_range_sort": 0,
+                }
+            )
+
+    merged_sources.sort(key=_source_sort_key, reverse=True)
+    primary_sources = merged_sources[:DISPLAY_PRIMARY_SOURCE_LIMIT]
+    optional_sources = [
+        source
+        for source in merged_sources[DISPLAY_PRIMARY_SOURCE_LIMIT:]
+        if source.get("_support_score", 0) >= OPTIONAL_SOURCE_MIN_SCORE
+    ][:DISPLAY_OPTIONAL_SOURCE_LIMIT]
+
+    return [
+        _strip_internal_source_fields(source)
+        for source in (primary_sources + optional_sources)
+    ]
+
+
+def _source_log_summary(sources):
+    summary = []
+
+    for source in sources or []:
+        summary.append(
+            {
+                "book": source.get("book") or source.get("filename"),
+                "page": source.get("display_page"),
+                "chunk_id": source.get("chunk_id"),
+            }
+        )
+
+    return summary
+
+
+def _log_source_filtering(
+    question: str,
+    records,
+    selected_records,
+    candidate_sources,
+    displayed_sources,
+    trace_id: str | None = None,
+):
+    rejected_records = [
+        record
+        for record in records
+        if record.get("rejected")
+    ]
+    reason_counts = {}
+
+    for record in rejected_records:
+        for reason in record.get("rejection_reasons") or ["unknown"]:
+            reason_counts[reason] = reason_counts.get(reason, 0) + 1
+
+    _trace(
+        trace_id,
+        (
+            "source filtering summary total_retrieved_chunks=%s "
+            "chunks_selected_for_context=%s candidate_sources=%s "
+            "displayed_sources=%s rejected_weak_sources=%s reasons=%s query=%r"
+        ),
+        len(records or []),
+        len(selected_records or []),
+        len(candidate_sources or []),
+        len(displayed_sources or []),
+        len(rejected_records),
+        reason_counts,
+        question,
+    )
+    _trace(
+        trace_id,
+        "debug_candidate_sources=%s",
+        _source_log_summary(candidate_sources),
+    )
+    _trace(
+        trace_id,
+        "displayed_sources=%s",
+        _source_log_summary(displayed_sources),
+    )
+
+    for record in selected_records or []:
+        source = record.get("source") or {}
+        _trace(
+            trace_id,
+            (
+                "selected context chunk index=%s score=%s semantic=%s "
+                "book=%r page=%r overlap=%s phrase_occurrences=%s "
+                "definition_or_explanation=%s"
+            ),
+            record.get("index"),
+            record.get("score"),
+            record.get("semantic_score"),
+            source.get("book") or source.get("filename"),
+            source.get("display_page"),
+            record.get("overlap_terms"),
+            record.get("phrase_occurrences"),
+            record.get("definition_or_explanation"),
+        )
+
+    for record in rejected_records:
+        source = record.get("source") or {}
+        _trace(
+            trace_id,
+            (
+                "rejected weak chunk index=%s score=%s reasons=%s "
+                "book=%r page=%r overlap=%s phrase_occurrences=%s "
+                "selected_for_context=%s"
+            ),
+            record.get("index"),
+            record.get("score"),
+            record.get("rejection_reasons"),
+            source.get("book") or source.get("filename"),
+            source.get("display_page"),
+            record.get("overlap_terms"),
+            record.get("phrase_occurrences"),
+            record.get("selected_for_context"),
+        )
 
 
 def _evaluate_retrieval_confidence(question: str, documents, distances=None):
@@ -898,7 +1524,7 @@ def _evaluate_retrieval_confidence(question: str, documents, distances=None):
         if important_terms and all(term in document_terms for term in important_terms):
             full_match_chunks += 1
 
-        if _has_definition_signal(question, document or "", important_terms):
+        if _has_explanation_signal(question, document or "", important_terms):
             definition_chunks += 1
 
     unique_term_count = len(set(important_terms))
@@ -1065,10 +1691,27 @@ def _retrieve_context(question: str, trace_id: str | None = None):
 
     try:
         collection = get_collection()
+        query_limit = _collection_query_limit(collection)
+
+        if query_limit <= 0:
+            confidence = {
+                "mode": "gemini_fallback",
+                "reason": "no_documents",
+                "document_count": 0,
+                "useful_chunks": 0,
+            }
+            _trace(trace_id, "retrieval return fallback reason=no_documents")
+            _log_retrieval_confidence(question, confidence, 0, trace_id)
+
+            return {
+                "context": "",
+                "sources": [],
+                "confidence": confidence,
+            }
 
         results = collection.query(
             query_texts=[question],
-            n_results=5,
+            n_results=query_limit,
             include=["documents", "metadatas", "distances"],
         )
     except KnowledgeBaseNotIndexedError:
@@ -1140,10 +1783,28 @@ def _retrieve_context(question: str, trace_id: str | None = None):
         }
 
     candidate_sources = _sources_from_metadatas(metadatas)
+    scored_records = _score_retrieved_chunks(
+        question,
+        ids,
+        documents,
+        metadatas,
+        distances,
+    )
+    selected_records = _select_supporting_chunks(scored_records)
+    selected_documents = [
+        record.get("document") or ""
+        for record in selected_records
+    ]
+    selected_distances = [
+        record.get("distance")
+        for record in selected_records
+    ]
+    displayed_sources = _merge_selected_sources(selected_records)
+    selected_context = _context_from_selected_chunks(selected_records)
     confidence = _evaluate_retrieval_confidence(
         question,
-        documents,
-        distances,
+        selected_documents,
+        selected_distances,
     )
     _log_retrieval_confidence(
         question,
@@ -1151,13 +1812,25 @@ def _retrieve_context(question: str, trace_id: str | None = None):
         len(candidate_sources),
         trace_id,
     )
+    _log_source_filtering(
+        question,
+        scored_records,
+        selected_records,
+        candidate_sources,
+        displayed_sources,
+        trace_id,
+    )
 
-    if confidence.get("mode") != "knowledge_base":
+    if confidence.get("mode") != "knowledge_base" or not selected_context:
         _trace(
             trace_id,
-            "retrieval return fallback reason=%s candidate_sources=%s returned_sources=0",
+            (
+                "retrieval return fallback reason=%s candidate_sources=%s "
+                "selected_chunks=%s displayed_sources=0"
+            ),
             confidence.get("reason", "unknown"),
             len(candidate_sources),
+            len(selected_records),
         )
         return {
             "context": "",
@@ -1167,13 +1840,18 @@ def _retrieve_context(question: str, trace_id: str | None = None):
 
     _trace(
         trace_id,
-        "retrieval return knowledge_base context_chars=%s returned_sources=%s",
-        len("\n\n".join(documents)),
+        (
+            "retrieval return knowledge_base context_chars=%s "
+            "selected_chunks=%s displayed_sources=%s candidate_sources=%s"
+        ),
+        len(selected_context),
+        len(selected_records),
+        len(displayed_sources),
         len(candidate_sources),
     )
     return {
-        "context": "\n\n".join(documents),
-        "sources": candidate_sources,
+        "context": selected_context,
+        "sources": displayed_sources,
         "confidence": confidence,
     }
 

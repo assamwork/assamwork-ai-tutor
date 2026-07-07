@@ -48,7 +48,10 @@ function getSourcePage(source) {
     return "Page not available";
   }
 
-  return `Page ${normalizedPage}`;
+  const pageLabel = String(normalizedPage).trim();
+  const prefix = /-|,/.test(pageLabel) ? "Pages" : "Page";
+
+  return `${prefix} ${pageLabel}`;
 }
 
 function getCollapsedSourceLabel(source, remainingCount) {
