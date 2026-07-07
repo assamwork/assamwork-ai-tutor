@@ -113,11 +113,14 @@ PRACTICE_SOURCE_PATTERNS = (
     r"\bprevious\s+year(?:s)?\b",
     r"\bmock(?:\s+test)?(?:s)?\b",
     r"\bpractice(?:\s+set)?(?:s)?\b",
+    r"\bpractice\s+question(?:s)?\b",
+    r"\bquestion\s+set(?:s)?\b",
     r"\bquestion\s+bank(?:s)?\b",
     r"\bmodel\s+paper(?:s)?\b",
     r"\bsample\s+paper(?:s)?\b",
     r"\bquestion\s+paper(?:s)?\b",
     r"\btest\s+series\b",
+    r"\btest\s+question(?:s)?\b",
     r"\bobjective\s+question(?:s)?\b",
 )
 REVISION_HIGH_YIELD_SOURCE_PATTERNS = (
@@ -148,9 +151,10 @@ PRIMARY_EXPLANATORY_SOURCE_PATTERNS = (
 PRACTICE_QUERY_PATTERN = re.compile(
     (
         r"\b(mcq(?:s)?|multiple\s+choice|pyq(?:s)?|previous\s+year(?:s)?|"
-        r"mock(?:\s+test)?(?:s)?|practice(?:\s+set)?(?:s)?|question\s+bank|"
-        r"model\s+paper(?:s)?|sample\s+paper(?:s)?|question\s+paper(?:s)?|"
-        r"quiz(?:zes)?)\b"
+        r"mock(?:\s+test)?(?:s)?|mock\s+question(?:s)?|"
+        r"practice(?:\s+(?:set|question))?(?:s)?|question\s+set(?:s)?|"
+        r"question\s+bank|model\s+paper(?:s)?|sample\s+paper(?:s)?|"
+        r"question\s+paper(?:s)?|test\s+question(?:s)?|quiz(?:zes)?)\b"
     ),
     re.IGNORECASE,
 )
@@ -832,6 +836,101 @@ def _is_practice_query(question: str):
     return bool(PRACTICE_QUERY_PATTERN.search(question or ""))
 
 
+def _requested_practice_count(question: str, default: int = 5):
+    normalized = (question or "").lower()
+    match = re.search(
+        (
+            r"\b(?:give|generate|create|make|prepare|write)?\s*"
+            r"(\d{1,2})\s+"
+            r"(?:mcq(?:s)?|questions?|quiz(?:zes)?|pyq(?:s)?|mock(?:s)?)\b"
+        ),
+        normalized,
+        re.IGNORECASE,
+    )
+
+    if not match:
+        return default
+
+    try:
+        count = int(match.group(1))
+    except (TypeError, ValueError):
+        return default
+
+    return min(max(count, 1), 20)
+
+
+def _clean_practice_topic(topic: str):
+    cleaned = re.sub(r"[\n\r]+", " ", topic or "")
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    cleaned = re.sub(
+        (
+            r"\b(?:with|including)\s+"
+            r"(?:answers?|solutions?|explanations?|options?).*$"
+        ),
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        (
+            r"^(?:please\s+)?(?:give|generate|create|make|prepare|write|set|"
+            r"provide)\s+(?:me\s+|us\s+)?"
+        ),
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(r"^\d{1,2}\s+", "", cleaned)
+    cleaned = re.sub(
+        (
+            r"\b(?:mcq(?:s)?|multiple\s+choice|quiz(?:zes)?|pyq(?:s)?|"
+            r"previous\s+year(?:s)?|mock(?:\s+(?:test|question))?(?:s)?|"
+            r"practice(?:\s+(?:set|question))?(?:s)?|question\s+set(?:s)?|"
+            r"question\s+bank|model\s+paper(?:s)?|sample\s+paper(?:s)?|"
+            r"question\s+paper(?:s)?|test\s+question(?:s)?|questions?)\b"
+        ),
+        " ",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"^(?:on|about|from|for|of|related\s+to)\s+",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(string.whitespace + "?.!:;-")
+
+    return cleaned
+
+
+def _extract_practice_topic(question: str):
+    if not _is_practice_query(question):
+        return ""
+
+    normalized = re.sub(r"\s+", " ", question or "").strip()
+    preposition_match = re.search(
+        r"\b(?:on|about|from|for|of|related\s+to)\s+(.+)$",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+
+    candidates = []
+
+    if preposition_match:
+        candidates.append(preposition_match.group(1))
+
+    candidates.append(normalized)
+
+    for candidate in candidates:
+        topic = _clean_practice_topic(candidate)
+
+        if topic and not _is_practice_query(topic):
+            return topic
+
+    return ""
+
+
 def _document_type_priority(document_type: str, practice_intent: bool):
     if practice_intent:
         priorities = {
@@ -1042,7 +1141,7 @@ def _greeting_answer():
 
 
 def _normalize_retrieval_query(query: str):
-    normalized_query = query
+    normalized_query = _extract_practice_topic(query) or query
 
     for pattern, replacement in RETRIEVAL_QUERY_ALIASES:
         normalized_query = pattern.sub(replacement, normalized_query)
@@ -1902,9 +2001,14 @@ def _log_retrieved_chunks(
         )
 
 
-def _retrieve_context(question: str, trace_id: str | None = None):
+def _retrieve_context(
+    question: str,
+    trace_id: str | None = None,
+    ranking_question: str | None = None,
+):
     global _collection
 
+    source_ranking_question = ranking_question or question
     _trace(trace_id, "retrieval start query=%r", question)
 
     try:
@@ -2008,7 +2112,10 @@ def _retrieve_context(question: str, trace_id: str | None = None):
         metadatas,
         distances,
     )
-    selected_records = _select_supporting_chunks(scored_records, question)
+    selected_records = _select_supporting_chunks(
+        scored_records,
+        source_ranking_question,
+    )
     selected_documents = [
         record.get("document") or ""
         for record in selected_records
@@ -2038,7 +2145,7 @@ def _retrieve_context(question: str, trace_id: str | None = None):
         trace_id,
     )
     _log_source_filtering(
-        question,
+        source_ranking_question,
         scored_records,
         selected_records,
         candidate_sources,
@@ -2109,6 +2216,32 @@ def _topic_heading(question: str, retrieval_query: str | None = None):
     topic = topic.strip(string.whitespace + "?.!:;-")
 
     return topic or (question or "Answer").strip() or "Answer"
+
+
+def _practice_kind(question: str):
+    normalized = (question or "").lower()
+
+    if re.search(r"\b(pyq(?:s)?|previous\s+year(?:s)?)\b", normalized):
+        return "PYQs"
+
+    if re.search(r"\bmock(?:\s+(?:test|question))?(?:s)?\b", normalized):
+        return "Mock Questions"
+
+    if re.search(r"\bquiz(?:zes)?\b", normalized):
+        return "Quiz Questions"
+
+    return "MCQs"
+
+
+def _practice_answer_details(question: str, retrieval_query: str | None = None):
+    topic = _topic_heading(_extract_practice_topic(question) or question, retrieval_query)
+
+    return {
+        "is_practice": _is_practice_query(question),
+        "kind": _practice_kind(question),
+        "topic": topic,
+        "count": _requested_practice_count(question),
+    }
 
 
 def _answer_length_instruction(question: str, question_type: str):
@@ -2226,6 +2359,63 @@ def _answer_prompt(question: str, context: str, retrieval_query: str | None = No
     retrieval_text = retrieval_query or question
     question_type = _classify_question(question, retrieval_text)
     topic_heading = _topic_heading(question, retrieval_text)
+    practice_details = _practice_answer_details(question, retrieval_text)
+
+    if practice_details["is_practice"]:
+        return f"""
+You are AssamWork AI Tutor in Competitive Exam Teacher Mode.
+
+You are an experienced faculty member for {EXAM_AUDIENCE}.
+
+Answer ONLY using the study material below.
+Use the material to create exam-practice questions grounded in the uploaded
+AssamWork knowledge base.
+
+Do not use Gemini general knowledge.
+Do not add external facts.
+Do not include a fallback notice.
+Do not mention unsupported facts.
+
+Study Material:
+
+{context}
+
+Original User Question:
+
+{question}
+
+Standalone Retrieval Topic:
+
+{retrieval_text}
+
+Practice Output:
+
+- Generate exactly {practice_details["count"]} questions unless the supplied
+  material is too thin; then generate only the supported number.
+- Start the answer with exactly this Markdown heading:
+
+## {practice_details["kind"]} on {practice_details["topic"]}
+
+- Use this format for every question:
+
+1. Question text
+A. Option
+B. Option
+C. Option
+D. Option
+
+Answer: C
+
+Explanation:
+One short line using only the study material.
+
+- Keep explanations to one short line.
+- Do not include Introduction, Key Points, Quick Revision, Exam Highlights,
+  Memory Tricks, or source names inside the answer.
+- If the user asks for PYQs/mock questions and the study material does not
+  contain actual PYQ/mock wording, create practice-style questions from the
+  material and do not claim they are actual previous-year questions.
+"""
 
     return f"""
 You are AssamWork AI Tutor in Competitive Exam Teacher Mode.
@@ -2293,6 +2483,47 @@ Preserve source grounding.
 
 def _general_knowledge_prompt(question: str, retrieval_query: str | None = None):
     retrieval_text = retrieval_query or question
+    practice_details = _practice_answer_details(question, retrieval_text)
+
+    if practice_details["is_practice"]:
+        return f"""
+You are AssamWork AI Tutor.
+
+The uploaded AssamWork study materials did not contain sufficient relevant
+material for this practice request.
+
+Generate exactly {practice_details["count"]} {practice_details["kind"].lower()}
+using Gemini's general knowledge.
+
+Start with exactly:
+
+## {practice_details["kind"]} on {practice_details["topic"]}
+
+Use this format for every question:
+
+1. Question text
+A. Option
+B. Option
+C. Option
+D. Option
+
+Answer: C
+
+Explanation:
+One short line.
+
+Do not cite AssamWork study materials.
+Do not invent page numbers or references.
+Do not mention sources.
+
+Original User Question:
+
+{question}
+
+Standalone Topic:
+
+{retrieval_text}
+"""
 
     return f"""
 You are AssamWork AI Tutor.
@@ -2320,10 +2551,21 @@ Gemini fallback answers. Do not create citations.
 """
 
 
-def _fallback_answer_text(answer: str):
+def _fallback_notice(question: str):
+    if _is_practice_query(question):
+        return (
+            "This topic is not currently covered in AssamWork's uploaded "
+            "study materials. The following MCQs are based on Gemini's "
+            "general knowledge."
+        )
+
+    return GEMINI_FALLBACK_NOTICE
+
+
+def _fallback_answer_text(answer: str, question: str = ""):
     clean_answer = (answer or "No answer returned.").strip()
 
-    return f"{GEMINI_FALLBACK_NOTICE}\n\n{clean_answer}"
+    return f"{_fallback_notice(question)}\n\n{clean_answer}"
 
 
 def _fallback_generation_error_text():
@@ -2442,7 +2684,7 @@ def generate_general_answer(question: str, retrieval_query: str):
         contents=_general_knowledge_prompt(question, retrieval_query),
     )
 
-    return _fallback_answer_text(response.text)
+    return _fallback_answer_text(response.text, question)
 
 
 def generate_knowledge_answer(question: str, context: str, retrieval_query: str):
@@ -2564,6 +2806,7 @@ def get_ai_service():
             normalize_history=_normalize_history,
             rewrite_question=rewrite_question,
             normalize_retrieval_query=_normalize_retrieval_query,
+            is_practice_request=_is_practice_query,
             retrieve_context=_retrieve_context,
             generate_general_answer=generate_general_answer,
             stream_general_answer=stream_general_answer,

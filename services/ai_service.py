@@ -14,10 +14,25 @@ from services.models import AnswerPackage
 logger = logging.getLogger(__name__)
 
 
-PROMPT_VERSION = "v5"
+PROMPT_VERSION = "v6"
 GEMINI_FALLBACK_NOTICE = (
     "Note: This topic is not currently covered in AssamWork's uploaded "
     "study materials. The following answer is based on Gemini's general knowledge."
+)
+PRACTICE_FALLBACK_NOTICE = (
+    "This topic is not currently covered in AssamWork's uploaded "
+    "study materials. The following MCQs are based on Gemini's "
+    "general knowledge."
+)
+PRACTICE_REQUEST_PATTERN = re.compile(
+    (
+        r"\b(mcq(?:s)?|multiple\s+choice|pyq(?:s)?|previous\s+year(?:s)?|"
+        r"mock(?:\s+test)?(?:s)?|mock\s+question(?:s)?|"
+        r"practice(?:\s+(?:set|question))?(?:s)?|question\s+set(?:s)?|"
+        r"question\s+bank|model\s+paper(?:s)?|sample\s+paper(?:s)?|"
+        r"question\s+paper(?:s)?|test\s+question(?:s)?|quiz(?:zes)?)\b"
+    ),
+    re.IGNORECASE,
 )
 
 NORMALIZATION_PREFIXES = (
@@ -52,6 +67,7 @@ class AIServiceDependencies:
     normalize_history: Callable
     rewrite_question: Callable
     normalize_retrieval_query: Callable[[str], str]
+    is_practice_request: Callable[[str], bool]
     retrieve_context: Callable
     generate_general_answer: Callable[[str, str], str]
     stream_general_answer: Callable[[str, str], Iterable[str]]
@@ -144,6 +160,13 @@ class QuestionNormalizer:
 
         words = re.findall(r"[a-z0-9]+", normalized)
         return len(words) <= 4 and bool(FOLLOW_UP_HINT_PATTERN.search(normalized))
+
+
+def _fallback_notice(question: str):
+    if PRACTICE_REQUEST_PATTERN.search(question or ""):
+        return PRACTICE_FALLBACK_NOTICE
+
+    return GEMINI_FALLBACK_NOTICE
 
 
 class AIService:
@@ -327,7 +350,12 @@ class AIService:
                 retrieval_query,
             )
 
-        cache_key = self._cache_key(retrieval_query)
+        cache_basis = (
+            rewrite["query"]
+            if self.dependencies.is_practice_request(rewrite["query"])
+            else retrieval_query
+        )
+        cache_key = self._cache_key(cache_basis)
         cached_package = self._get_cached_package(cache_key, trace_id)
 
         if cached_package is not None:
@@ -345,7 +373,11 @@ class AIService:
 
         self.metrics.record_cache_miss()
         self._trace(trace_id, "ai_service route retrieval_query=%r", retrieval_query)
-        rag = self.dependencies.retrieve_context(retrieval_query, trace_id)
+        rag = self.dependencies.retrieve_context(
+            retrieval_query,
+            trace_id,
+            rewrite["query"],
+        )
         confidence = rag.get("confidence") or {}
         mode = (
             "knowledge_base"
@@ -456,7 +488,7 @@ class AIService:
     ):
         self._trace(trace_id, "ai_service stream branch=gemini_fallback sources=0")
         answer_parts = []
-        notice = f"{GEMINI_FALLBACK_NOTICE}\n\n"
+        notice = f"{_fallback_notice(question)}\n\n"
 
         try:
             yield {
