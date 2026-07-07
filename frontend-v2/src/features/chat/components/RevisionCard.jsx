@@ -1,20 +1,29 @@
 import { useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { ChevronDown, NotebookText } from "lucide-react";
+import { Check, ChevronDown, NotebookText } from "lucide-react";
 
-export default function RevisionCard({
-  content,
-  markdownComponents,
-}) {
+function parseRevisionItems(content = "") {
+  return content
+    .split(/\n+/)
+    .map((line) =>
+      line
+        .replace(/^\s*(?:[-*]|\u2022|\u2713|\d+[.)])\s*/, "")
+        .replace(/\*\*/g, "")
+        .trim()
+    )
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
+export default function RevisionCard({ content }) {
   const [isOpen, setIsOpen] = useState(false);
+  const revisionItems = parseRevisionItems(content);
 
-  if (!content?.trim()) {
+  if (!revisionItems.length) {
     return null;
   }
 
   return (
-    <section className="revision-card mt-3 overflow-hidden rounded-2xl border px-3 py-2.5 shadow-sm backdrop-blur-xl sm:max-w-3xl sm:px-3.5">
+    <section className="revision-card overflow-hidden rounded-lg border px-3 py-2.5 backdrop-blur-xl sm:px-3.5">
       <button
         type="button"
         onClick={() => setIsOpen((open) => !open)}
@@ -26,7 +35,7 @@ export default function RevisionCard({
             <NotebookText size={15} />
           </span>
           <span className="revision-card-title block truncate text-sm font-semibold leading-5 sm:text-[15px]">
-            Revision
+            Quick Revision
           </span>
         </span>
 
@@ -39,14 +48,21 @@ export default function RevisionCard({
       </button>
 
       {isOpen && (
-        <div className="revision-card-content mt-2 border-t pt-3 text-sm leading-6 sm:text-[15px]">
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={markdownComponents}
-          >
-            {content}
-          </ReactMarkdown>
-        </div>
+        <ul className="revision-card-content mt-2 grid gap-1.5 border-t pt-3">
+          {revisionItems.map((item, index) => (
+            <li
+              key={`${item}-${index}`}
+              className="revision-card-note flex min-w-0 items-center gap-2 text-sm font-medium leading-5 sm:text-[15px]"
+            >
+              <span className="revision-card-check flex h-5 w-5 shrink-0 items-center justify-center rounded-full">
+                <Check size={13} strokeWidth={2.4} />
+              </span>
+              <span className="min-w-0 truncate">
+                {item}
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   );

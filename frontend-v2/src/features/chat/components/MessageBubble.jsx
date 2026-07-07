@@ -2,7 +2,6 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Sparkles } from "lucide-react";
 
-import MessageActions from "./MessageActions";
 import RevisionCard from "./RevisionCard";
 import SourceCard from "./SourceCard";
 
@@ -98,6 +97,18 @@ const markdownComponents = {
   },
 };
 
+function stripNotebookOnlySections(content = "") {
+  const sectionPattern =
+    /(?:^|\n)(?:#{1,6}\s*)?(?:\*\*)?\s*(quick revision|revision(?:\s+notes?)?|exam highlights?|memory tricks?|pyq(?:\s*\/\s*exam relevance)?|exam relevance|exam tips?|mnemonics?)\s*(?:\*\*)?\s*:?\s*(?:\n|$)/i;
+  const match = sectionPattern.exec(content);
+
+  if (!match?.index && match?.index !== 0) {
+    return content;
+  }
+
+  return content.slice(0, match.index).trim();
+}
+
 function splitRevisionContent(content = "") {
   const revisionHeadingPattern =
     /(?:^|\n)(?:#{1,6}\s*)?(?:\*\*)?\s*(revision(?:\s+(?:points|notes))?|quick revision|helpful revision|key revision points)\s*(?:\*\*)?\s*:?\s*\n/i;
@@ -105,7 +116,7 @@ function splitRevisionContent(content = "") {
 
   if (!match?.index && match?.index !== 0) {
     return {
-      answerContent: content,
+      answerContent: stripNotebookOnlySections(content),
       revisionContent: "",
     };
   }
@@ -114,7 +125,7 @@ function splitRevisionContent(content = "") {
   const revisionStart = headingStart + match[0].length;
 
   return {
-    answerContent: content.slice(0, headingStart).trim(),
+    answerContent: stripNotebookOnlySections(content.slice(0, headingStart)),
     revisionContent: content.slice(revisionStart).trim(),
   };
 }
@@ -122,7 +133,7 @@ function splitRevisionContent(content = "") {
 function getMessageParts(message) {
   if (typeof message.revision === "string" && message.revision.trim()) {
     return {
-      answerContent: message.content,
+      answerContent: stripNotebookOnlySections(message.content),
       revisionContent: message.revision,
     };
   }
@@ -161,7 +172,10 @@ export default function MessageBubble({ message }) {
           </p>
         ) : (
           <>
-            <article className="assistant-message min-w-0 overflow-x-auto px-0 py-0 text-[15px] leading-7 text-slate-700 sm:text-base">
+            <article className="assistant-answer-section assistant-message min-w-0 overflow-x-auto rounded-lg border px-4 py-3.5 text-[15px] leading-7 text-slate-700 sm:px-5 sm:text-base">
+              <div className="answer-section-label mb-2 text-xs font-bold uppercase">
+                Answer
+              </div>
               {isStreaming && !answerContent ? (
                 <div className="thinking-indicator inline-flex items-center gap-1.5 text-slate-500">
                   <span>Thinking</span>
@@ -188,16 +202,13 @@ export default function MessageBubble({ message }) {
             </article>
 
             {!isStreaming && (
-              <>
+              <div className="premium-answer-sections mt-2 grid gap-2">
                 <RevisionCard
                   content={revisionContent}
-                  markdownComponents={markdownComponents}
                 />
 
                 <SourceCard sources={sources} />
-
-                <MessageActions content={message.content} />
-              </>
+              </div>
             )}
           </>
         )}

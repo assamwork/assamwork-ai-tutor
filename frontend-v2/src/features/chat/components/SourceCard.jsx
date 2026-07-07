@@ -54,25 +54,18 @@ function getSourcePage(source) {
   return `${prefix} ${pageLabel}`;
 }
 
-function getCollapsedSourceLabel(source, remainingCount) {
-  const countLabel = remainingCount > 0 ? ` +${remainingCount}` : "";
-
-  return `${getSourceBook(source)} · ${getSourcePage(source)}${countLabel}`;
-}
-
 export default function SourceCard({ sources = [] }) {
   const [isOpen, setIsOpen] = useState(false);
   const sourceList = Array.isArray(sources) ? sources : [];
+  const visibleSources = sourceList.slice(0, 3);
+  const hiddenCount = Math.max(sourceList.length - visibleSources.length, 0);
 
   if (!sourceList.length) {
     return null;
   }
 
-  const mainSource = sourceList[0];
-  const remainingCount = Math.max(sourceList.length - 1, 0);
-
   return (
-    <section className="source-card mt-3 overflow-hidden rounded-2xl border px-3 py-2.5 shadow-sm backdrop-blur-xl sm:max-w-3xl sm:px-3.5">
+    <section className="source-card overflow-hidden rounded-lg border px-3 py-2.5 backdrop-blur-xl sm:px-3.5">
       <button
         type="button"
         onClick={() => setIsOpen((open) => !open)}
@@ -85,7 +78,7 @@ export default function SourceCard({ sources = [] }) {
           </span>
           <span className="min-w-0">
             <span className="source-card-title block truncate text-sm font-semibold leading-5 sm:text-[15px]">
-              {getCollapsedSourceLabel(mainSource, remainingCount)}
+              Sources
             </span>
           </span>
         </span>
@@ -100,7 +93,7 @@ export default function SourceCard({ sources = [] }) {
 
       {isOpen && (
         <div className="source-card-list mt-2 border-t pt-2">
-          {sourceList.map((source, index) => (
+          {visibleSources.map((source, index) => (
             <div
               key={`${getSourceBook(source)}-${getSourcePage(source)}-${index}`}
               className="source-card-row grid grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-xl px-2 py-2"
@@ -113,6 +106,11 @@ export default function SourceCard({ sources = [] }) {
               </p>
             </div>
           ))}
+          {hiddenCount > 0 && (
+            <div className="source-card-more rounded-xl px-2 py-2 text-xs font-semibold leading-5">
+              +{hiddenCount} more
+            </div>
+          )}
         </div>
       )}
     </section>

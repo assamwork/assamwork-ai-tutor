@@ -305,7 +305,7 @@ GENERIC_OPENING_PHRASES = (
     "Below is",
 )
 UNIVERSAL_EXAM_STRUCTURE = """
-Use this universal Knowledge Base answer structure:
+Use this Knowledge Base answer structure:
 
 # Topic Heading
 - Start immediately with a Markdown H1 heading for the topic.
@@ -321,171 +321,125 @@ Use this universal Knowledge Base answer structure:
 - Include dates, places, people, provisions, features, and keywords when present.
 - Avoid paragraph blocks.
 
-## Detailed Explanation
+## Explanation
 - Include only when the question needs it.
 - Use headings, bullets, tables, or examples.
 - Never write one huge paragraph.
 
-## Exam Highlights
-- Very important section.
-- Include high-yield facts supported by the retrieved material.
-- Mention important years, related personalities, related events, map facts,
-  articles, institutions, or features only when present in the context.
-- Do not claim something is frequently asked in an exam unless the material
-  itself supports that.
+## Examples
+- Include only if examples are needed and supported by the material.
 
-## Quick Revision
-- 5-10 one-line bullets.
-- Last-minute notes only.
-- Do not copy sentences from the answer.
-- Prefer names, years, places, articles, battles, features, and keywords.
+Allowed sections:
+- # Topic Heading
+- ## Introduction
+- ## Key Points
+- ## Explanation
+- ## Examples
 
-## Memory Tricks
-- Include only when the retrieved material directly supports a safe memory cue.
-- Do not invent mnemonics.
-
-## PYQ / Exam Relevance
-- Include only when supported by retrieved material.
-- Never hallucinate exam frequency.
+Forbidden sections:
+- Quick Revision
+- Exam Highlights
+- Memory Tricks
+- Revision Notes
+- PYQ / Exam Relevance
+- Exam Tips
 """
 EXAM_TEMPLATES = {
     "Person": (
         "## Introduction\n"
-        "- 2-3 direct lines.\n\n"
-        "## Key Facts\n"
-        "- Born\n"
-        "- Position\n"
-        "- Known For\n"
-        "- Important Events / Years\n\n"
-        "## Major Contributions\n"
-        "- High-yield contributions from the context.\n\n"
-        "## Important Years\n"
-        "- Include years only if present.\n\n"
-        "## Exam Highlights\n"
-        "- Scoring facts from the material.\n\n"
-        "## Quick Revision\n"
-        "- 5-10 one-line facts."
+        "## Key Points\n"
+        "## Explanation\n"
+        "## Examples"
     ),
     "Constitution Article": (
-        "## Definition\n"
-        "## Features\n"
-        "## Importance\n"
-        "## Exceptions\n"
-        "## Landmark Cases\n"
-        "## Exam Highlights\n"
-        "## Quick Revision"
+        "## Introduction\n"
+        "## Key Points\n"
+        "## Explanation\n"
+        "## Examples"
     ),
     "Scheme": (
-        "## Launch\n"
-        "## Ministry\n"
-        "## Objectives\n"
-        "## Beneficiaries\n"
-        "## Features\n"
-        "## Exam Highlights\n"
-        "## Quick Revision"
+        "## Introduction\n"
+        "## Key Points\n"
+        "## Explanation\n"
+        "## Examples"
     ),
     "Battle": (
-        "## Background\n"
-        "## Timeline\n"
-        "## Leaders\n"
-        "## Outcome\n"
-        "## Importance\n"
-        "## Exam Highlights\n"
-        "## Quick Revision"
+        "## Introduction\n"
+        "## Key Points\n"
+        "## Explanation\n"
+        "## Examples"
     ),
     "Movement": (
-        "## Background\n"
-        "## Timeline\n"
-        "## Leaders\n"
-        "## Outcome\n"
-        "## Importance\n"
-        "## Exam Highlights\n"
-        "## Quick Revision"
+        "## Introduction\n"
+        "## Key Points\n"
+        "## Explanation\n"
+        "## Examples"
     ),
     "Geography": (
-        "## Location\n"
-        "## Features\n"
-        "## Importance\n"
-        "## Map Facts\n"
-        "## Exam Highlights\n"
-        "## Quick Revision"
+        "## Introduction\n"
+        "## Key Points\n"
+        "## Explanation\n"
+        "## Examples"
     ),
     "River": (
-        "## Location / Course\n"
-        "## Features\n"
-        "## Tributaries / Associated Places\n"
-        "## Importance\n"
-        "## Map Facts\n"
-        "## Exam Highlights\n"
-        "## Quick Revision"
+        "## Introduction\n"
+        "## Key Points\n"
+        "## Explanation\n"
+        "## Examples"
     ),
     "Mountain": (
-        "## Location\n"
-        "## Features\n"
-        "## Importance\n"
-        "## Map Facts\n"
-        "## Exam Highlights\n"
-        "## Quick Revision"
+        "## Introduction\n"
+        "## Key Points\n"
+        "## Explanation\n"
+        "## Examples"
     ),
     "Science": (
-        "## Definition\n"
-        "## Working Principle\n"
-        "## Applications\n"
-        "## Important Facts\n"
-        "## Quick Revision"
+        "## Introduction\n"
+        "## Key Points\n"
+        "## Explanation\n"
+        "## Examples"
     ),
     "Current Affairs": (
-        "## Event\n"
-        "## Background\n"
-        "## Why Important\n"
-        "## Exam Relevance\n"
-        "## Quick Revision"
+        "## Introduction\n"
+        "## Key Points\n"
+        "## Explanation\n"
+        "## Examples"
     ),
     "Environment": (
-        "## Location\n"
-        "## Key Features\n"
-        "## Importance\n"
-        "## Map / Ramsar Facts\n"
-        "## Exam Highlights\n"
-        "## Quick Revision"
+        "## Introduction\n"
+        "## Key Points\n"
+        "## Explanation\n"
+        "## Examples"
     ),
     "Economy": (
-        "## Meaning\n"
+        "## Introduction\n"
         "## Key Points\n"
-        "## Data / Institutions\n"
-        "## Exam Highlights\n"
-        "## Quick Revision"
+        "## Explanation\n"
+        "## Examples"
     ),
     "Organization": (
-        "## Overview\n"
-        "## Formation / Headquarters\n"
-        "## Objectives\n"
-        "## Functions\n"
-        "## Exam Highlights\n"
-        "## Quick Revision"
+        "## Introduction\n"
+        "## Key Points\n"
+        "## Explanation\n"
+        "## Examples"
     ),
     "History": (
-        "## Background\n"
-        "## Key Facts\n"
-        "## Timeline\n"
-        "## Importance\n"
-        "## Exam Highlights\n"
-        "## Quick Revision"
+        "## Introduction\n"
+        "## Key Points\n"
+        "## Explanation\n"
+        "## Examples"
     ),
     "Mathematics": (
-        "## Formula / Concept\n"
-        "## Steps\n"
-        "## Example\n"
-        "## Shortcut / Exam Tip\n"
-        "## Quick Revision"
+        "## Introduction\n"
+        "## Key Points\n"
+        "## Explanation\n"
+        "## Examples"
     ),
     "General": (
         "## Introduction\n"
         "## Key Points\n"
-        "## Detailed Explanation\n"
-        "## Exam Highlights\n"
-        "## Exam Relevance\n"
-        "## Quick Revision"
+        "## Explanation\n"
+        "## Examples"
     ),
 }
 
@@ -577,6 +531,32 @@ def _parse_structured_answer(response_text: str):
         "answer": answer or "No answer returned.",
         "revision": revision,
     }
+
+
+def _strip_non_answer_sections(answer: str):
+    clean_answer = (answer or "").strip()
+
+    if not clean_answer:
+        return clean_answer
+
+    section_pattern = re.compile(
+        (
+            r"(?:^|\n)"
+            r"(?:#{1,6}\s*)?"
+            r"(?:\*\*)?\s*"
+            r"(quick\s+revision|revision(?:\s+notes?)?|exam\s+highlights?|"
+            r"memory\s+tricks?|pyq(?:\s*/\s*exam\s+relevance)?|"
+            r"exam\s+relevance|exam\s+tips?|mnemonics?)"
+            r"\s*(?:\*\*)?\s*:?\s*(?:\n|$)"
+        ),
+        re.IGNORECASE,
+    )
+    match = section_pattern.search(clean_answer)
+
+    if not match:
+        return clean_answer
+
+    return clean_answer[:match.start()].rstrip()
 
 
 def _parse_query_rewrite(response_text: str, fallback_question: str):
@@ -1960,29 +1940,28 @@ def _exam_template_instruction(question_type: str):
     return f"""
 Detected Question Type: {question_type}
 
-Universal Structure:
+Answer Structure:
 
 {UNIVERSAL_EXAM_STRUCTURE}
 
 Question-Type Template:
 
-Use this template when the retrieved material supports it:
+Use this template as the maximum allowed answer shape:
 
 {template}
 
 Template rules:
 - Omit any section whose facts are not present in the supplied study material.
 - Never fill missing fields from outside knowledge.
-- Prefer compact Markdown headings, bullets, spacing, and small tables where appropriate.
+- Prefer compact Markdown headings, bullets, spacing, and small tables where helpful.
 - Avoid Wikipedia-style paragraphs.
 - Avoid repeated information.
 - Never produce walls of text.
-- Use ## and ### headings, bullets, tables, and restrained bold.
+- Use only the allowed headings. Do not add extra study-note sections.
 - Never start with generic AI phrases such as: {", ".join(GENERIC_OPENING_PHRASES)}.
 - Do not assume the student is revising.
-- Add labels such as Exam Tip, Frequently Asked, Remember, Important Year,
-  Mnemonic, or PYQ Hint only when the content is directly supported by the
-  supplied material.
+- Never include Quick Revision, Exam Highlights, Memory Tricks, Revision Notes,
+  PYQ hints, exam tips, or mnemonic sections in the answer.
 """
 
 
@@ -2031,6 +2010,15 @@ Start the answer immediately with this exact Markdown heading:
 
 Then continue with the selected study-note sections. Do not write any sentence
 before the heading.
+
+Answer Rules:
+
+- Generate the answer only.
+- Include only these sections when supported: ## Introduction, ## Key Points,
+  ## Explanation, and ## Examples.
+- Do not include Quick Revision, Exam Highlights, Memory Tricks, Revision Notes,
+  PYQ / Exam Relevance, Exam Tips, or mnemonic sections.
+- Do not write last-minute notes in the answer. Those are generated separately.
 
 Exam Template:
 
@@ -2100,14 +2088,12 @@ def _structured_prompt(
 
 Return JSON only with this structure:
 {{
-  "answer": "exam-oriented answer text",
-  "revision": ["5-10 independent one-line last-minute revision facts"]
+  "answer": "answer text only"
 }}
 
 If the supplied study material is insufficient, return:
 {{
-  "answer": "The supplied AssamWork study material does not contain enough information to answer this fully.",
-  "revision": []
+  "answer": "The supplied AssamWork study material does not contain enough information to answer this fully."
 }}
 """
 
@@ -2116,14 +2102,20 @@ def _revision_prompt(question: str, context: str, answer: str):
     return f"""
 You are AssamWork AI Tutor in Competitive Exam Teacher Mode.
 
-Using only the study material and completed answer below, create 5-10 high-yield
-one-line quick revision bullets for competitive exam students.
+Using only the study material and completed answer below, create 4-8 high-yield
+20-second quick revision notes for competitive exam students.
 
 Prefer years, names, places, battles, articles, institutions, features, and
 frequently asked facts when they are present.
 
-The revision must not copy answer sentences.
-It must be independently useful as 20-second last-minute notes.
+Rules:
+- Each item must be a short note, ideally 2-6 words.
+- No paragraphs.
+- No explanations.
+- No repeated answer sentences.
+- No markdown headings.
+- No numbering.
+- Do not include facts that are absent from the study material or answer.
 
 If the answer says the supplied material does not contain enough information,
 return an empty revision list.
@@ -2142,7 +2134,7 @@ Completed Answer:
 
 Return JSON only with this structure:
 {{
-  "revision": ["independent one-line last-minute revision fact"]
+  "revision": ["short last-minute note"]
 }}
 """
 
@@ -2159,12 +2151,8 @@ def _answer_schema():
         "type": "object",
         "properties": {
             "answer": {"type": "string"},
-            "revision": {
-                "type": "array",
-                "items": {"type": "string"},
-            },
         },
-        "required": ["answer", "revision"],
+        "required": ["answer"],
     }
 
 
@@ -2211,7 +2199,19 @@ def generate_knowledge_answer(question: str, context: str, retrieval_query: str)
         config=_json_config(_answer_schema()),
     )
 
-    return _parse_structured_answer(response.text)
+    parsed = _parse_structured_answer(response.text)
+    answer = _strip_non_answer_sections(parsed["answer"])
+
+    try:
+        revision = generate_revision(question, context, answer)
+    except Exception as error:
+        logger.warning("Unable to generate revision metadata: %s", error)
+        revision = ""
+
+    return {
+        "answer": answer,
+        "revision": revision,
+    }
 
 
 def stream_general_answer(question: str, retrieval_query: str):
